@@ -1,0 +1,9 @@
+langgraph
+langchain
+langchain-openai
+pydantic
+jinja2
+weasyprint
+python-dotenv
+reportlab
+groq 
