@@ -6,4 +6,6 @@ jinja2
 weasyprint
 python-dotenv
 reportlab
-groq 
+langchain-groq
+groq
+

@@ -28,7 +28,8 @@ def load_customer_database() -> Dict[str, Dict[str, Any]]:
                 "credit_score": customer['score'],
                 "employment": customer.get('employment', 'Salaried'),
                 "company": customer.get('company', 'N/A'),
-                "monthly_income": customer['salary']
+                "monthly_income": customer['salary'],
+                "collateral":customer['collateral']
             }
         
         return customer_db
