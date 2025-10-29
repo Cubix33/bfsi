@@ -66,50 +66,46 @@ class SecuredLoanAgent:
         }
     
     def parse_collateral(self, collateral_str: str) -> Dict[str, Any]:
-        """Parse collateral string to extract type and value - FIXED VERSION"""
+        """Parse collateral string to extract type and value - ULTRA ROBUST VERSION"""
         if not collateral_str or collateral_str.lower() == "none":
             return None
         
-        # ==================== ROBUST VALUE EXTRACTION ====================
+        print(f"🔍 DEBUG: Parsing collateral: {collateral_str}")
+        
         value = None
         
-        # Pattern 1: "(Estimated Value: ₹45,00,000)" or "(₹45,00,000)"
-        value_match = re.search(r'\([^)]*?₹\s*([\d,]+)\)', collateral_str)
-        if value_match:
-            value_str = value_match.group(1).replace(',', '').strip()
-            try:
-                value = int(value_str)
-            except ValueError:
-                pass
+        clean_str = collateral_str.replace('â', '').replace('¹', '').strip()
         
-        # Pattern 2: "Estimated Value: ₹45,00,000" or "₹45,00,000" (not in parentheses)
-        if not value:
-            value_match = re.search(r'(?:estimated\s+)?(?:value\s*:?\s*)?₹\s*([\d,]+)', collateral_str, re.IGNORECASE)
-            if value_match:
-                value_str = value_match.group(1).replace(',', '').strip()
-                try:
-                    value = int(value_str)
-                except ValueError:
-                    pass
+        patterns = [
+            r'₹\s*([\d,]+)',
+            r'\(.*?₹\s*([\d,]+)\)',
+            r'value[:\s]+([\d,]+)',
+            r':\s*₹?\s*([\d,]{6,})',
+            r'\b([\d,]{6,})\b',
+        ]
         
-        # Pattern 3: Just numbers like "500000" or "5,00,000" (minimum 5 digits)
-        if not value:
-            value_match = re.search(r'\b([\d,]{5,})\b', collateral_str)
-            if value_match:
-                value_str = value_match.group(1).replace(',', '').strip()
-                try:
-                    value = int(value_str)
-                    if value < 50000:
-                        value = None
-                except ValueError:
-                    pass
+        for pattern in patterns:
+            matches = re.findall(pattern, clean_str, re.IGNORECASE)
+            if matches:
+                for match in matches:
+                    try:
+                        clean_value = match.replace(',', '').replace(' ', '').strip()
+                        test_value = int(clean_value)
+                        if test_value >= 50000:
+                            value = test_value
+                            print(f"✅ DEBUG: Extracted value: ₹{value:,}")
+                            break
+                    except (ValueError, AttributeError):
+                        continue
+            if value:
+                break
         
-        # Pattern 4: "5 lakhs" or "45 lakh"
         if not value:
-            lakh_match = re.search(r'(\d+)\s*(?:lakh|lac)', collateral_str, re.IGNORECASE)
+            lakh_match = re.search(r'(\d+(?:\.\d+)?)\s*(?:lakh|lac)', clean_str, re.IGNORECASE)
             if lakh_match:
                 try:
-                    value = int(lakh_match.group(1)) * 100000
+                    value = int(float(lakh_match.group(1)) * 100000)
+                    print(f"✅ DEBUG: Extracted from lakhs: ₹{value:,}")
                 except ValueError:
                     pass
         
@@ -117,10 +113,9 @@ class SecuredLoanAgent:
             print(f"⚠️ Could not extract value from collateral: {collateral_str}")
             return None
         
-        # ==================== IMPROVED TYPE DETECTION ====================
-        collateral_lower = collateral_str.lower()
+        collateral_lower = clean_str.lower()
         
-        if "fixed deposit" in collateral_lower or "fd" in collateral_lower or "deposit" in collateral_lower:
+        if "fixed deposit" in collateral_lower or " fd" in collateral_lower or "deposit" in collateral_lower:
             collateral_type = "fd"
         elif any(word in collateral_lower for word in ["property", "flat", "house", "villa", "apartment", "shop", "residential", "commercial", "2bhk", "3bhk", "1bhk"]):
             collateral_type = "property"
@@ -139,6 +134,8 @@ class SecuredLoanAgent:
         
         ltv = self.collateral_ltv.get(collateral_type, 0.60)
         max_loan = int(value * ltv)
+        
+        print(f"✅ DEBUG: Collateral parsed - Type: {collateral_type}, Value: ₹{value:,}, Max Loan: ₹{max_loan:,}")
         
         return {
             "type": collateral_type,
@@ -187,6 +184,8 @@ class MasterAgent:
             "awaiting_secured_loan_decision": False,
             "awaiting_detail_correction": False,
             "awaiting_secured_loan_application": False,
+            "awaiting_manual_data_entry": False,
+            "manual_data_step": 0,
             "secured_loan_offer": None,
             "loan_request": {},
             "verification_status": False,
@@ -308,8 +307,14 @@ May I have your phone number to get started?"""
                 self.conversation_history.append({"role": "assistant", "content": response})
                 return response
             else:
-                response = """I couldn't find your profile in our system. Let me take your details:\n\nCould you please provide:\n1. Your full name\n2. Your city\n3. Your monthly income"""
+                self.state["awaiting_manual_data_entry"] = True
+                self.state["manual_data_step"] = 1
+                self.state["temp_customer_data"] = {"phone": phone[-10:]}
                 self.state["stage"] = "new_customer_onboarding"
+                
+                response = """I couldn't find your profile in our system. No worries! Let me collect your details.
+
+What is your full name?"""
                 self.conversation_history.append({"role": "assistant", "content": response})
                 return response
         else:
@@ -318,10 +323,131 @@ May I have your phone number to get started?"""
             return response
     
     def _handle_new_customer_onboarding(self, user_message: str) -> str:
-        response = "Thank you for providing your details. Currently, our automated system is optimized for existing customers. Please contact our support team to continue your application."
-        self.state["stage"] = "completed"
-        self.conversation_history.append({"role": "assistant", "content": response})
-        return response
+        """Complete manual data entry flow WITH COLLATERAL COLLECTION"""
+        if not self.state.get("awaiting_manual_data_entry"):
+            response = "Thank you for providing your details. Currently, our automated system is optimized for existing customers. Please contact our support team to continue your application."
+            self.state["stage"] = "completed"
+            self.conversation_history.append({"role": "assistant", "content": response})
+            return response
+        
+        step = self.state["manual_data_step"]
+        
+        if step == 1:
+            self.state["temp_customer_data"]["name"] = user_message.strip()
+            self.state["manual_data_step"] = 2
+            response = "Great! What is your city?"
+            self.conversation_history.append({"role": "assistant", "content": response})
+            return response
+        
+        elif step == 2:
+            self.state["temp_customer_data"]["city"] = user_message.strip()
+            self.state["manual_data_step"] = 3
+            response = "Perfect! What is your complete address?"
+            self.conversation_history.append({"role": "assistant", "content": response})
+            return response
+        
+        elif step == 3:
+            self.state["temp_customer_data"]["address"] = user_message.strip()
+            self.state["manual_data_step"] = 4
+            response = "Thank you! What is your monthly income (in rupees)?"
+            self.conversation_history.append({"role": "assistant", "content": response})
+            return response
+        
+        elif step == 4:
+            income_match = re.search(r'(\d+)', user_message.replace(',', ''))
+            if income_match:
+                monthly_income = int(income_match.group(1))
+                self.state["temp_customer_data"]["monthly_income"] = monthly_income
+                self.state["temp_customer_data"]["pre_approved_limit"] = min(monthly_income * 10, 500000)
+                
+                self.state["manual_data_step"] = 5
+                response = """Great! One last question:
+
+Do you have any collateral that you'd like to use for a secured loan? This could be:
+🏠 Property (house, flat, shop)
+🚗 Vehicle (car, bike)
+🪙 Gold/Jewelry
+💰 Fixed Deposits
+📈 Stocks/Mutual Funds
+
+Please provide details like:
+"Residential Property - 2BHK (Estimated Value: ₹45,00,000)"
+or
+"Vehicle - Honda City 2019 (Value: ₹6,50,000)"
+
+(Or simply type "none" if you don't have collateral)"""
+                self.conversation_history.append({"role": "assistant", "content": response})
+                return response
+            else:
+                response = "I didn't catch a valid income amount. Please provide your monthly income in rupees (e.g., 50000):"
+                self.conversation_history.append({"role": "assistant", "content": response})
+                return response
+        
+        elif step == 5:
+            user_lower = user_message.lower().strip()
+            
+            if user_lower in ["none", "no", "nothing", "don't have", "nope", "nahi", "nil"]:
+                collateral_value = "None"
+            else:
+                collateral_value = user_message.strip()
+            
+            self.state["temp_customer_data"].update({
+                "email": f"{self.state['temp_customer_data']['name'].lower().replace(' ', '.')}@email.com",
+                "credit_score": 750,
+                "employment": "Salaried",
+                "company": "N/A",
+                "current_loans": "None",
+                "collateral": collateral_value,
+                "id": f"C{100 + hash(self.state['temp_customer_data']['phone']) % 100:02d}",
+                "age": 30
+            })
+            
+            self.state["customer_data"] = self.state["temp_customer_data"]
+            self.state["awaiting_manual_data_entry"] = False
+            self.state["stage"] = "needs_assessment"
+            
+            if collateral_value != "None":
+                collateral_info = self.secured_loan_agent.parse_collateral(collateral_value)
+                
+                if collateral_info:
+                    response = f"""Perfect! Thank you for providing your details, {self.state['customer_data']['name']}! ✨
+
+📊 **Your Profile Summary:**
+- Monthly Income: ₹{self.state['temp_customer_data']['monthly_income']:,}
+- Pre-approved Limit: ₹{self.state['customer_data']['pre_approved_limit']:,}
+- Collateral: {collateral_info['description']} (Value: ₹{collateral_info['value']:,})
+
+🎉 **Great news!** With your collateral, you can get:
+- Unsecured Loan: Up to ₹{self.state['customer_data']['pre_approved_limit']:,}
+- **Secured Loan: Up to ₹{collateral_info['max_loan']:,}** at just {collateral_info['interest_rate']}% interest! 🔥
+
+Now, let's discuss your loan needs:
+1. What would you like to use this loan for?
+2. How much loan amount are you looking for?
+3. What repayment tenure would be comfortable for you?"""
+                else:
+                    response = f"""Perfect! Thank you for providing your details, {self.state['customer_data']['name']}!
+
+Based on your income of ₹{self.state['temp_customer_data']['monthly_income']:,}/month, you're eligible for a pre-approved loan of up to ₹{self.state['customer_data']['pre_approved_limit']:,}! 🎉
+
+Before we proceed, could you tell me:
+1. What would you like to use this loan for?
+2. How much loan amount are you looking for?
+3. What repayment tenure would be comfortable for you?"""
+            else:
+                response = f"""Perfect! Thank you for providing your details, {self.state['customer_data']['name']}!
+
+Based on your income of ₹{self.state['temp_customer_data']['monthly_income']:,}/month, you're eligible for a pre-approved loan of up to ₹{self.state['customer_data']['pre_approved_limit']:,}! 🎉
+
+Before we proceed, could you tell me:
+1. What would you like to use this loan for?
+2. How much loan amount are you looking for?
+3. What repayment tenure would be comfortable for you?"""
+            
+            self.conversation_history.append({"role": "assistant", "content": response})
+            return response
+        
+        return "Something went wrong. Please type 'restart' to begin again."
     
     def _handle_needs_assessment(self, user_message: str) -> str:
         sales_response = self.sales_agent.negotiate_loan(
@@ -362,10 +488,39 @@ Is this information correct? (Yes/No)"""
         user_lower = user_message.lower()
         
         if self.state.get("awaiting_detail_correction"):
+            updated_data = {}
+            
+            if "name" in user_lower:
+                name_match = re.search(r'name[:\s]+([a-zA-Z\s]+)', user_message, re.IGNORECASE)
+                if name_match:
+                    updated_data["name"] = name_match.group(1).strip()
+            
+            phone_match = re.search(r'(\d{10})', user_message)
+            if phone_match:
+                updated_data["phone"] = phone_match.group(1)
+            
+            if "address" in user_lower:
+                address_match = re.search(r'address[:\s]+(.+)', user_message, re.IGNORECASE | re.DOTALL)
+                if address_match:
+                    updated_data["address"] = address_match.group(1).strip()
+            
+            if not updated_data:
+                updated_data["address"] = user_message.strip()
+            
+            self.state["customer_data"].update(updated_data)
+            
             self.state["awaiting_detail_correction"] = False
             self.state["stage"] = "needs_assessment"
             
-            response = f"""Thank you for the updated information! Let me process these changes.\n\nNow, could you tell me:\n1. What would you like to use this loan for?\n2. How much loan amount are you looking for?\n3. What repayment tenure would be comfortable for you?"""
+            response = f"""✅ Thank you! Your details have been updated:
+- Name: {self.state['customer_data']['name']}
+- Phone: {self.state['customer_data']['phone']}
+- Address: {self.state['customer_data']['address']}
+
+Now, let's continue with your loan application. Could you tell me:
+1. What would you like to use this loan for?
+2. How much loan amount are you looking for?
+3. What repayment tenure would be comfortable for you?"""
             self.conversation_history.append({"role": "assistant", "content": response})
             return response
         
@@ -384,16 +539,20 @@ Is this information correct? (Yes/No)"""
             
             elif self._is_negative(user_lower):
                 self.state["awaiting_profile_permission"] = False
-                self.state["stage"] = "completed"
-                self.state["final_decision"] = "REJECTED_PERMISSION"
-                del self.state["temp_customer_data"]
+                self.state["awaiting_manual_data_entry"] = True
+                self.state["manual_data_step"] = 1
+                self.state["stage"] = "new_customer_onboarding"
+                
+                phone = self.state["temp_customer_data"]["phone"]
+                self.state["temp_customer_data"] = {"phone": phone}
 
-                response = """I understand. Unfortunately, I cannot proceed with a personalized offer without accessing your profile. 
-Thank you for considering Tata Capital. Have a great day."""
+                response = """No problem! I understand you'd prefer to provide your details manually.
+
+Let's start fresh. What is your full name?"""
                 self.conversation_history.append({"role": "assistant", "content": response})
                 return response
             else:
-                response = "Please respond with 'Yes' to allow me to access your profile, or 'No' to stop."
+                response = "Please respond with 'Yes' to allow me to access your profile, or 'No' to provide details manually."
                 self.conversation_history.append({"role": "assistant", "content": response})
                 return response
         
@@ -420,12 +579,13 @@ Thank you for considering Tata Capital. Have a great day."""
                 
         elif self._is_negative(user_lower):
             self.state["awaiting_detail_correction"] = True
-            response = """No problem! Let's update your details. Please provide your correct:
-1. Full name
-2. Phone number  
-3. Complete address
+            response = """No problem! Let's update your details. Please provide your correct information in this format:
 
-(You can provide all at once or one by one)"""
+Name: Your Full Name
+Phone: 1234567890
+Address: Your Complete Address
+
+(Or just tell me what needs to be corrected)"""
             self.conversation_history.append({"role": "assistant", "content": response})
             return response
         
