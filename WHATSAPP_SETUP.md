@@ -1,4 +1,4 @@
-# 📱 WhatsApp Integration Setup Guide
+#  WhatsApp Integration Setup Guide
 
 ## Overview
 This guide will help you add WhatsApp as a chat channel to your BFSI loan chatbot. Users can interact with your bot directly through WhatsApp while your existing backend (MasterAgent) handles all the logic.
@@ -6,41 +6,7 @@ This guide will help you add WhatsApp as a chat channel to your BFSI loan chatbo
 ---
 
 
-
-✅ **WhatsApp webhook server** (`whatsapp_bot.py`)
-- Flask server to receive/send WhatsApp messages
-- Session management for multiple concurrent users
-- Integration with your existing `MasterAgent`
-
-✅ **Multi-user support**
-- Each WhatsApp user gets their own conversation session
-- Sessions auto-expire after 30 minutes of inactivity
-
-✅ **Seamless backend integration**
-- Your existing agents (Sales, Verification, Credit, etc.) work as-is
-- No changes needed to your core logic
-
----
-
-
-
-### 1. Twilio Account (Free Trial Available)
-- Sign up at: https://www.twilio.com/try-twilio
-- You'll get $15 free credit
-- Free trial limitations:
-  - Can only send messages to verified phone numbers
-  - Messages include "Sent from your Twilio trial account" footer
-
-### 2. Python Packages
-Already added to `requirements.txt`:
-```
-flask
-twilio
-```
-
----
-
-## 🚀 Step-by-Step Setup
+##  Step-by-Step Setup
 
 ### Step 1: Install Dependencies
 
@@ -143,7 +109,7 @@ Twilio needs to send webhooks to your server, so you need a public URL.
 
 ---
 
-### Step 6: Test Your WhatsApp Bot! 🎉
+### Step 6: Test Your WhatsApp Bot! 
 
 1. Send a WhatsApp message to your Twilio sandbox number
 2. The bot should respond with the welcome message
@@ -163,7 +129,7 @@ Bot: Great! I found your profile, Rajesh Kumar...
 
 ---
 
-## 🏗️ Architecture
+##  Architecture
 
 ```
 WhatsApp User
@@ -181,7 +147,7 @@ Response back through same path
 
 ---
 
-## 🔥 Features
+## Features
 
 ### ✅ What Works
 - ✅ Multi-user concurrent conversations
@@ -190,7 +156,7 @@ Response back through same path
 - ✅ All agent functionalities (Sales, Verification, Credit, etc.)
 - ✅ Restart command (`restart`, `reset`, `start over`)
 
-### 🚧 Limitations & Future Enhancements
+### Limitations & Future Enhancements
 
 1. **PDF Sanction Letters**
    - Currently: Text notification only
@@ -207,7 +173,7 @@ Response back through same path
 
 ---
 
-## 📱 Available Commands
+##  Available Commands
 
 Users can send these commands anytime:
 
@@ -219,7 +185,7 @@ Users can send these commands anytime:
 
 ---
 
-## 🛠️ Troubleshooting
+##  Troubleshooting
 
 ### Bot not responding?
 1. Check if Flask server is running
@@ -242,7 +208,7 @@ Users can send these commands anytime:
 
 ---
 
-## 🚀 Going to Production
+##  Going to Production
 
 ### 1. Get WhatsApp Business API Access
 - Not the sandbox - real WhatsApp API
@@ -274,7 +240,7 @@ send_whatsapp_message(phone, "Your sanction letter:", media_url=s3_url)
 
 ---
 
-## 📊 Monitoring Active Sessions
+##  Monitoring Active Sessions
 
 Visit `http://localhost:5000/status` to see:
 - Number of active sessions
@@ -282,7 +248,7 @@ Visit `http://localhost:5000/status` to see:
 
 ---
 
-## 🎉 You're All Set!
+##  You're All Set!
 
 Your BFSI chatbot now works on **both** channels:
 1. **CLI** (original) - Run `python main.py`
@@ -292,7 +258,7 @@ Both use the same backend logic! 🚀
 
 ---
 
-## 📞 Support
+##  Support
 
 If you run into issues:
 1. Check Flask server logs
@@ -302,3 +268,4 @@ If you run into issues:
 ---
 
 **Happy Building! 🏦💬**
+
