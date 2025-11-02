@@ -7,6 +7,7 @@ from agents.underwriting import UnderwritingAgent
 from agents.document import DocumentAgent
 from agents.credit import CreditAgent
 from agents.upload import UploadAgent
+from agents.risk import RiskAgent  # <-- 1. IMPORT XGBOOST/RISK AGENT
 from utils.mock_data import get_customer_data, get_offer_data
 import json
 from dotenv import load_dotenv
@@ -39,22 +40,25 @@ def open_pdf(filepath):
         print(f"Please open manually: {os.path.abspath(filepath)}")
 
 
+# --- NEW SECURED LOAN AGENT (Added to main.py for simplicity) ---
 class SecuredLoanAgent:
     """
     Secured Loan Agent - Handles collateral-based loan offers
     """
     
     def __init__(self):
+        # LTV Ratios
         self.collateral_ltv = {
-            "property": 0.65,
-            "vehicle": 0.75,
-            "gold": 0.75,
-            "fd": 0.90,
-            "mutual_funds": 0.70,
-            "stocks": 0.60,
-            "land": 0.60
+            "property": 0.65,      # 65% for Property
+            "vehicle": 0.75,       # 75% for Vehicle
+            "gold": 0.75,          # 75% for Gold
+            "fd": 0.90,            # 90% for Fixed Deposits
+            "mutual_funds": 0.70,  # 70% for Mutual Funds
+            "stocks": 0.60,        # 60% for Stocks
+            "land": 0.60           # 60% for Land
         }
         
+        # Interest Rates
         self.interest_rates = {
             "property": 9.5,
             "vehicle": 10.5,
@@ -66,22 +70,24 @@ class SecuredLoanAgent:
         }
     
     def parse_collateral(self, collateral_str: str) -> Dict[str, Any]:
-        """Parse collateral string to extract type and value - ULTRA ROBUST VERSION"""
+        """Parse collateral string to extract type and value - ROBUST"""
         if not collateral_str or collateral_str.lower() == "none":
             return None
         
-        print(f"🔍 DEBUG: Parsing collateral: {collateral_str}")
+        # print(f"🔍 DEBUG: Parsing collateral: {collateral_str}") # Removed debug
         
         value = None
         
+        # Clean string from potential OCR/encoding errors
         clean_str = collateral_str.replace('â', '').replace('¹', '').strip()
         
+        # Regex patterns to find the value
         patterns = [
-            r'₹\s*([\d,]+)',
-            r'\(.*?₹\s*([\d,]+)\)',
-            r'value[:\s]+([\d,]+)',
-            r':\s*₹?\s*([\d,]{6,})',
-            r'\b([\d,]{6,})\b',
+            r'₹\s*([\d,]+)',             # Finds "₹ 45,00,000"
+            r'\(.*?₹\s*([\d,]+)\)',     # Finds "(Value: ₹45,00,000)"
+            r'value[:\s]+([\d,]+)',    # Finds "Value: 45,00,000"
+            r':\s*₹?\s*([\d,]{6,})',    # Finds ": 45,00,000"
+            r'\b([\d,]{6,})\b',        # Finds any number > 6 digits
         ]
         
         for pattern in patterns:
@@ -91,30 +97,26 @@ class SecuredLoanAgent:
                     try:
                         clean_value = match.replace(',', '').replace(' ', '').strip()
                         test_value = int(clean_value)
-                        if test_value >= 50000:
+                        if test_value >= 50000: # Min collateral value
                             value = test_value
-                            print(f"✅ DEBUG: Extracted value: ₹{value:,}")
                             break
                     except (ValueError, AttributeError):
                         continue
-            if value:
-                break
+                if value:
+                    break
         
-        if not value:
+        if not value: # Try lakh/crore
             lakh_match = re.search(r'(\d+(?:\.\d+)?)\s*(?:lakh|lac)', clean_str, re.IGNORECASE)
             if lakh_match:
-                try:
-                    value = int(float(lakh_match.group(1)) * 100000)
-                    print(f"✅ DEBUG: Extracted from lakhs: ₹{value:,}")
-                except ValueError:
-                    pass
+                try: value = int(float(lakh_match.group(1)) * 100000)
+                except ValueError: pass
         
-        if not value:
-            print(f"⚠️ Could not extract value from collateral: {collateral_str}")
+        if not value: # Give up
             return None
         
         collateral_lower = clean_str.lower()
         
+        # Determine collateral type
         if "fixed deposit" in collateral_lower or " fd" in collateral_lower or "deposit" in collateral_lower:
             collateral_type = "fd"
         elif any(word in collateral_lower for word in ["property", "flat", "house", "villa", "apartment", "shop", "residential", "commercial", "2bhk", "3bhk", "1bhk"]):
@@ -130,12 +132,10 @@ class SecuredLoanAgent:
         elif "land" in collateral_lower or "agricultural" in collateral_lower or "plot" in collateral_lower:
             collateral_type = "land"
         else:
-            collateral_type = "property"
+            collateral_type = "property" # Default
         
         ltv = self.collateral_ltv.get(collateral_type, 0.60)
         max_loan = int(value * ltv)
-        
-        print(f"✅ DEBUG: Collateral parsed - Type: {collateral_type}, Value: ₹{value:,}, Max Loan: ₹{max_loan:,}")
         
         return {
             "type": collateral_type,
@@ -162,9 +162,10 @@ class SecuredLoanAgent:
             "max_amount": collateral_info["max_loan"],
             "interest_rate": collateral_info["interest_rate"],
             "min_tenure": 12,
-            "max_tenure": 120,
+            "max_tenure": 120, # Up to 10 years
             "processing_fee": "1% of loan amount"
         }
+# --- END OF NEW AGENT ---
 
 
 class MasterAgent:
@@ -183,10 +184,10 @@ class MasterAgent:
             "awaiting_profile_permission": False,
             "awaiting_secured_loan_decision": False,
             "awaiting_detail_correction": False,
-            "awaiting_secured_loan_application": False,
-            "awaiting_manual_data_entry": False,
-            "manual_data_step": 0,
-            "secured_loan_offer": None,
+            "awaiting_secured_loan_application": False, # New flag
+            "awaiting_manual_data_entry": False, # New flag
+            "manual_data_step": 0, # New flag
+            "secured_loan_offer": None, # New state
             "loan_request": {},
             "verification_status": False,
             "credit_score": None,
@@ -203,7 +204,8 @@ class MasterAgent:
         self.underwriting_agent = UnderwritingAgent()
         self.document_agent = DocumentAgent()
         self.upload_agent = UploadAgent()
-        self.secured_loan_agent = SecuredLoanAgent()
+        self.secured_loan_agent = SecuredLoanAgent() # Initialize new agent
+        self.risk_agent = RiskAgent()
         
     def _is_affirmative(self, text: str) -> bool:
         return any(word in text for word in ["yes", "yep", "ya", "y", "ys", "yeah", "ok", "okay", "sure", "correct", "proceed", "accept"])
@@ -224,30 +226,46 @@ class MasterAgent:
         return self.state["user_personality"]
 
     def _get_personality_prompt(self, personality: str) -> str:
-        prompts = {
+        """Get system prompt instructions for a given personality, including negotiation and collateral logic."""
+        
+        base_prompts = {
             "casual": """
-- Be very casual, friendly, and use simple language.
-- Use emojis and slang (like 'bro', 'cool', 'no problem').
-- Example: "Cool, bro! 7 lakhs it is. How long you need it for?"
+- **Your Vibe:** Be super casual, friendly, and use simple language (like 'bro', 'cool', 'no problem', 'let's figure this out').
+- **Negotiation:** You're a persuasive negotiator. If the user hesitates on EMI, suggest a longer tenure (e.g., "we can stretch it to 6 years") or a slightly smaller loan to fit their budget. Your goal is to find a "yes".
+- **Collateral (Value-Add):** {COLLATERAL_ADVICE}
             """,
             "formal": """
-- Be professional, polite, and use formal language.
-- Avoid slang and emojis. Use full sentences.
-- Example: "Understood. We will update the application to ₹700,000. What is the desired repayment tenure?"
+- **Your Vibe:** Be professional, polite, and use formal language. Avoid slang.
+- **Negotiation:** You are a skilled advisor. Your goal is to secure the customer's business. If they express concern about the EMI, proactively offer to model alternative scenarios. "We could explore extending the tenure to 72 months to reduce the monthly obligation, or alternatively, we could assess a slightly revised principal amount."
+- **Collateral (Value-Add):** {COLLATERAL_ADVICE}
             """,
             "empathetic": """
-- Be very understanding, patient, and reassuring.
-- Acknowledge their feelings ("I understand this can be confusing...").
-- Example: "I understand this is frustrating. Don't worry, we can fix it. You want 7 lakhs, correct? Let me update that for you."
+- **Your Vibe:** Be very understanding, patient, and reassuring ("I understand this is a big decision", "Don't worry, we can find a solution that works for you").
+- **Negotiation:** Be a problem-solver. If the user is worried ("That EMI is high"), be reassuring. "I completely understand that concern. The good news is we have flexibility. We could look at a longer 6-year term to lower the payment, or maybe a slightly smaller loan of (Loan Amount * 0.9) would feel more comfortable. What works best for you?"
+- **Collateral (Value-Add):** {COLLATERAL_ADVICE}
             """,
             "friendly": """
-- Be warm, friendly, and conversational.
-- Enthusiastic but not pushy.
-- Use emojis occasionally (💰 🎉 ✨ 👍 📊).
-- Example: "No problem at all! Let's get that updated to 7 lakhs for you. What repayment period were you thinking of?"
+- **Your Vibe:** Be warm, friendly, conversational, and enthusiastic (💰 🎉 👍).
+- **Negotiation:** Be a helpful partner. Your goal is to get them a loan they're happy with. If they hesitate, jump in. "No problem! If that EMI feels a bit high, we can absolutely adjust. We could either extend the tenure to 6 or 7 years to lower the monthly payment, or we could look at a smaller amount. What do you think?"
+- **Collateral (Value-Add):** {COLLATERAL_ADVICE}
             """
         }
-        return prompts.get(personality, prompts["friendly"])
+        
+        base_prompt = base_prompts.get(personality, base_prompts["friendly"])
+        
+        # --- Collateral Math Logic ---
+        collateral_advice = ""
+        collateral_info = None
+        if self.state.get("customer_data"):
+             collateral_str = self.state["customer_data"].get("collateral", "None")
+             collateral_info = self.secured_loan_agent.parse_collateral(collateral_str)
+
+        if collateral_info and collateral_info.get("value", 0) > 0 and collateral_info.get("type") == "property":
+            # Use 3.5% annual rental yield, divided by 12 for monthly
+            monthly_rent = (collateral_info["value"] * 0.035) / 12
+            collateral_advice = f"Just a pro-tip! I noticed you have a property listed. You could be earning **₹{monthly_rent:,.0f} a month** just by renting it out! That's a fantastic extra income stream. Something to think about!"
+        
+        return base_prompt.replace("{COLLATERAL_ADVICE}", collateral_advice)
     
     def start_conversation(self, customer_phone: str = None):
         print("=" * 80)
@@ -267,6 +285,7 @@ May I have your phone number to get started?"""
         
         self.state["user_personality"] = self._detect_personality(user_message.lower())
         
+        # Updated state machine with new 'secured_loan' stage
         if self.state["stage"] == "initial":
             return self._handle_initial_stage(user_message)
         elif self.state["stage"] == "new_customer_onboarding":
@@ -307,9 +326,10 @@ May I have your phone number to get started?"""
                 self.conversation_history.append({"role": "assistant", "content": response})
                 return response
             else:
+                # --- NEW USER FLOW ---
                 self.state["awaiting_manual_data_entry"] = True
                 self.state["manual_data_step"] = 1
-                self.state["temp_customer_data"] = {"phone": phone[-10:]}
+                self.state["temp_customer_data"] = {"phone": phone[-10:]} # Save the phone
                 self.state["stage"] = "new_customer_onboarding"
                 
                 response = """I couldn't find your profile in our system. No worries! Let me collect your details.
@@ -322,6 +342,7 @@ What is your full name?"""
             self.conversation_history.append({"role": "assistant", "content": response})
             return response
     
+    # --- NEW FUNCTION FOR NEW USERS ---
     def _handle_new_customer_onboarding(self, user_message: str) -> str:
         """Complete manual data entry flow WITH COLLATERAL COLLECTION"""
         if not self.state.get("awaiting_manual_data_entry"):
@@ -332,32 +353,33 @@ What is your full name?"""
         
         step = self.state["manual_data_step"]
         
-        if step == 1:
+        if step == 1: # Was asking for name
             self.state["temp_customer_data"]["name"] = user_message.strip()
             self.state["manual_data_step"] = 2
             response = "Great! What is your city?"
             self.conversation_history.append({"role": "assistant", "content": response})
             return response
         
-        elif step == 2:
+        elif step == 2: # Was asking for city
             self.state["temp_customer_data"]["city"] = user_message.strip()
             self.state["manual_data_step"] = 3
             response = "Perfect! What is your complete address?"
             self.conversation_history.append({"role": "assistant", "content": response})
             return response
         
-        elif step == 3:
+        elif step == 3: # Was asking for address
             self.state["temp_customer_data"]["address"] = user_message.strip()
             self.state["manual_data_step"] = 4
             response = "Thank you! What is your monthly income (in rupees)?"
             self.conversation_history.append({"role": "assistant", "content": response})
             return response
         
-        elif step == 4:
+        elif step == 4: # Was asking for income
             income_match = re.search(r'(\d+)', user_message.replace(',', ''))
             if income_match:
                 monthly_income = int(income_match.group(1))
                 self.state["temp_customer_data"]["monthly_income"] = monthly_income
+                # Give a default pre-approved limit based on income
                 self.state["temp_customer_data"]["pre_approved_limit"] = min(monthly_income * 10, 500000)
                 
                 self.state["manual_data_step"] = 5
@@ -383,7 +405,7 @@ or
                 self.conversation_history.append({"role": "assistant", "content": response})
                 return response
         
-        elif step == 5:
+        elif step == 5: # Was asking for collateral
             user_lower = user_message.lower().strip()
             
             if user_lower in ["none", "no", "nothing", "don't have", "nope", "nahi", "nil"]:
@@ -391,20 +413,28 @@ or
             else:
                 collateral_value = user_message.strip()
             
+            # Create the full customer profile
             self.state["temp_customer_data"].update({
                 "email": f"{self.state['temp_customer_data']['name'].lower().replace(' ', '.')}@email.com",
-                "credit_score": 750,
+                "credit_score": 750,  # Assign a default score for new users
                 "employment": "Salaried",
                 "company": "N/A",
                 "current_loans": "None",
                 "collateral": collateral_value,
-                "id": f"C{100 + hash(self.state['temp_customer_data']['phone']) % 100:02d}",
-                "age": 30
+                "id": f"C{100 + hash(self.state['temp_customer_data']['phone']) % 100:02d}", # Create a temp ID
+                "age": 30 # Assign a default age
             })
+            
+            # --- RUN XGBOOST MODEL FOR NEW USER ---
+            risk_result = self.risk_agent.get_safety_score(self.state["temp_customer_data"])
+            self.state["temp_customer_data"]["internal_safety_score"] = risk_result["safety_score"]
+            # ---
             
             self.state["customer_data"] = self.state["temp_customer_data"]
             self.state["awaiting_manual_data_entry"] = False
             self.state["stage"] = "needs_assessment"
+            
+            pre_approved_limit = self.state['customer_data']['pre_approved_limit']
             
             if collateral_value != "None":
                 collateral_info = self.secured_loan_agent.parse_collateral(collateral_value)
@@ -414,11 +444,12 @@ or
 
 📊 **Your Profile Summary:**
 - Monthly Income: ₹{self.state['temp_customer_data']['monthly_income']:,}
-- Pre-approved Limit: ₹{self.state['customer_data']['pre_approved_limit']:,}
+- Unsecured Limit: ₹{pre_approved_limit:,}
 - Collateral: {collateral_info['description']} (Value: ₹{collateral_info['value']:,})
+- Internal Safety Score: {self.state['customer_data']['internal_safety_score']:.0%}
 
-🎉 **Great news!** With your collateral, you can get:
-- Unsecured Loan: Up to ₹{self.state['customer_data']['pre_approved_limit']:,}
+🎉 **Great news!** With your collateral, you have two options:
+- Unsecured Loan: Up to ₹{pre_approved_limit:,}
 - **Secured Loan: Up to ₹{collateral_info['max_loan']:,}** at just {collateral_info['interest_rate']}% interest! 🔥
 
 Now, let's discuss your loan needs:
@@ -426,18 +457,18 @@ Now, let's discuss your loan needs:
 2. How much loan amount are you looking for?
 3. What repayment tenure would be comfortable for you?"""
                 else:
-                    response = f"""Perfect! Thank you for providing your details, {self.state['customer_data']['name']}!
+                    response = f"""Perfect! Thank you, {self.state['customer_data']['name']}!
 
-Based on your income of ₹{self.state['temp_customer_data']['monthly_income']:,}/month, you're eligible for a pre-approved loan of up to ₹{self.state['customer_data']['pre_approved_limit']:,}! 🎉
+Based on your income (₹{self.state['temp_customer_data']['monthly_income']:,}) and an internal safety score of {self.state['customer_data']['internal_safety_score']:.0%}, you're eligible for a pre-approved loan of up to ₹{pre_approved_limit:,}! 🎉
 
 Before we proceed, could you tell me:
 1. What would you like to use this loan for?
 2. How much loan amount are you looking for?
 3. What repayment tenure would be comfortable for you?"""
             else:
-                response = f"""Perfect! Thank you for providing your details, {self.state['customer_data']['name']}!
+                response = f"""Perfect! Thank you, {self.state['customer_data']['name']}!
 
-Based on your income of ₹{self.state['temp_customer_data']['monthly_income']:,}/month, you're eligible for a pre-approved loan of up to ₹{self.state['customer_data']['pre_approved_limit']:,}! 🎉
+Based on your income (₹{self.state['temp_customer_data']['monthly_income']:,}) and an internal safety score of {self.state['customer_data']['internal_safety_score']:.0%}, you're eligible for a pre-approved loan of up to ₹{pre_approved_limit:,}! 🎉
 
 Before we proceed, could you tell me:
 1. What would you like to use this loan for?
@@ -450,12 +481,15 @@ Before we proceed, could you tell me:
         return "Something went wrong. Please type 'restart' to begin again."
     
     def _handle_needs_assessment(self, user_message: str) -> str:
+        # Get the full personality prompt with math/negotiation logic
+        personality_instructions = self._get_personality_prompt(self.state["user_personality"])
+        
         sales_response = self.sales_agent.negotiate_loan(
             user_message,
             self.state["customer_data"],
             self.conversation_history,
             self.state["loan_request"],
-            self.state["user_personality"]
+            personality_instructions  # Pass the full prompt, not just the name
         )
         
         self.state["loan_request"] = sales_response.get("loan_details", self.state["loan_request"])
@@ -487,9 +521,11 @@ Is this information correct? (Yes/No)"""
     def _handle_verification(self, user_message: str) -> str:
         user_lower = user_message.lower()
         
+        # --- NEW: Handle detail correction flow ---
         if self.state.get("awaiting_detail_correction"):
             updated_data = {}
             
+            # Simple parser for "key: value"
             if "name" in user_lower:
                 name_match = re.search(r'name[:\s]+([a-zA-Z\s]+)', user_message, re.IGNORECASE)
                 if name_match:
@@ -504,13 +540,14 @@ Is this information correct? (Yes/No)"""
                 if address_match:
                     updated_data["address"] = address_match.group(1).strip()
             
-            if not updated_data:
+            # If no keys, assume they just sent the address
+            if not updated_data and len(user_message) > 10:
                 updated_data["address"] = user_message.strip()
             
             self.state["customer_data"].update(updated_data)
             
             self.state["awaiting_detail_correction"] = False
-            self.state["stage"] = "needs_assessment"
+            self.state["stage"] = "needs_assessment" # Go back to needs assessment
             
             response = f"""✅ Thank you! Your details have been updated:
 - Name: {self.state['customer_data']['name']}
@@ -528,23 +565,37 @@ Now, let's continue with your loan application. Could you tell me:
             
             if self._is_affirmative(user_lower):
                 customer_data = self.state["temp_customer_data"]
+                
+                # --- RUN XGBOOST/RISK AGENT ---
+                risk_result = self.risk_agent.get_safety_score(customer_data)
+                customer_data["internal_safety_score"] = risk_result["safety_score"]
+                # ---
+                
                 self.state["customer_data"] = customer_data
                 self.state["stage"] = "needs_assessment"
                 self.state["awaiting_profile_permission"] = False
                 del self.state["temp_customer_data"]
                 
-                response = f"""Great! I found your profile, {customer_data['name']}.\n\nI see you're based in {customer_data['city']}. Good news - you have a pre-approved personal loan offer of ₹{customer_data['pre_approved_limit']:,}!\n\nBefore we proceed, could you tell me:\n1. What would you like to use this loan for?\n2. How much loan amount are you looking for?\n3. What repayment tenure would be comfortable for you?"""
+                response = f"""Great! I found your profile, {customer_data['name']}.
+I see you're based in {customer_data['city']}. Good news - you have a pre-approved personal loan offer of ₹{customer_data['pre_approved_limit']:,}!
+(Our internal safety model also gives you a score of {customer_data['internal_safety_score']:.0%})
+
+Before we proceed, could you tell me:
+1. What would you like to use this loan for?
+2. How much loan amount are you looking for?
+3. What repayment tenure would be comfortable for you?"""
                 self.conversation_history.append({"role": "assistant", "content": response})
                 return response
             
             elif self._is_negative(user_lower):
+                # --- UPDATED: Divert to manual entry flow ---
                 self.state["awaiting_profile_permission"] = False
                 self.state["awaiting_manual_data_entry"] = True
                 self.state["manual_data_step"] = 1
                 self.state["stage"] = "new_customer_onboarding"
                 
                 phone = self.state["temp_customer_data"]["phone"]
-                self.state["temp_customer_data"] = {"phone": phone}
+                self.state["temp_customer_data"] = {"phone": phone} # Keep phone, clear rest
 
                 response = """No problem! I understand you'd prefer to provide your details manually.
 
@@ -578,6 +629,7 @@ Let's start fresh. What is your full name?"""
                 return response
                 
         elif self._is_negative(user_lower):
+            # --- NEW: Set flag to wait for correction ---
             self.state["awaiting_detail_correction"] = True
             response = """No problem! Let's update your details. Please provide your correct information in this format:
 
@@ -603,6 +655,7 @@ Address: Your Complete Address
         if credit_result["score"] < 700:
             self.state["stage"] = "rejection"
             
+            # --- UPDATED: Check for collateral BEFORE sending response ---
             collateral_info = self.secured_loan_agent.parse_collateral(
                 self.state["customer_data"].get("collateral", "None")
             )
@@ -670,9 +723,10 @@ Type 'upload' to auto-fetch from database, or type 'manual upload' to upload you
             self.conversation_history.append({"role": "assistant", "content": response})
             return response
         
-        else:
+        else:  # REJECTED
             self.state["stage"] = "rejection"
             
+            # --- UPDATED: Check for collateral BEFORE sending response ---
             collateral_info = self.secured_loan_agent.parse_collateral(
                 self.state["customer_data"].get("collateral", "None")
             )
@@ -704,6 +758,7 @@ Would you like to proceed with this amount? (Yes/No)"""
     def _handle_document_upload(self, user_message: str) -> str:
         user_lower = user_message.lower()
         
+        # --- NEW: Allow user to switch to secured loan ---
         if any(word in user_lower for word in ["secured", "collateral", "option"]):
             return self._handle_rejection(user_message)
         
@@ -820,39 +875,59 @@ What would you prefer?"""
         self.conversation_history.append({"role": "assistant", "content": response})
         return response
     
+    # --- NEW FUNCTION TO HANDLE SECURED LOAN FLOW ---
     def _handle_secured_loan_flow(self, user_message: str) -> str:
         user_lower = user_message.lower()
         
         if self.state.get("awaiting_secured_loan_application"):
             
-            amount_match = re.search(r'(\d+)\s*(?:lakh|lac|l)', user_lower)
-            if amount_match:
-                requested_amount = int(amount_match.group(1)) * 100000
+            # Allow user to go back
+            if self._is_negative(user_lower) or "back" in user_lower or "cancel" in user_lower:
+                self.state["awaiting_secured_loan_application"] = False
+                self.state["stage"] = "rejection"
+                response = "Okay, cancelling the secured loan application. What would you like to do instead?"
+                self.conversation_history.append({"role": "assistant", "content": response})
+                return response
+            
+            # Check for affirmative to max amount
+            if self._is_affirmative(user_lower):
+                 requested_amount = self.state["secured_loan_offer"]["max_amount"]
             else:
-                numbers = re.findall(r'\d+', user_message)
-                if numbers:
-                    requested_amount = int(numbers[0])
-                    if requested_amount < 10000:
-                        requested_amount *= 100000
+                # Try to parse a new amount
+                amount_match = re.search(r'(\d+(?:\.\d+)?)\s*(?:lakh|lac|l)', user_lower)
+                if amount_match:
+                    requested_amount = int(float(amount_match.group(1)) * 100000)
                 else:
-                    requested_amount = None
+                    numbers = re.findall(r'\d+', user_message.replace(',', ''))
+                    if numbers:
+                        num = int(numbers[0])
+                        if num < 1000: # e.g., user types "5" for 5 lakh
+                            requested_amount = num * 100000
+                        else:
+                            requested_amount = num
+                    else:
+                        requested_amount = None
             
             if requested_amount:
                 secured_offer = self.state["secured_loan_offer"]
                 
                 if requested_amount <= secured_offer["max_amount"]:
-                    tenure = self.state["loan_request"].get("tenure", 60)
+                    tenure = self.state["loan_request"].get("tenure", 60) # Default to 5 years
                     interest_rate = secured_offer["interest_rate"]
                     monthly_rate = interest_rate / (12 * 100)
-                    emi = int(
-                        (requested_amount * monthly_rate * (1 + monthly_rate)**tenure) /
-                        ((1 + monthly_rate)**tenure - 1)
-                    )
+                    
+                    if (1 + monthly_rate)**tenure - 1 == 0:
+                        emi = int(requested_amount / tenure)
+                    else:
+                        emi = int(
+                            (requested_amount * monthly_rate * (1 + monthly_rate)**tenure) /
+                            ((1 + monthly_rate)**tenure - 1)
+                        )
                     
                     self.state["loan_request"]["amount"] = requested_amount
                     self.state["loan_request"]["interest_rate"] = interest_rate
                     self.state["loan_request"]["emi"] = emi
-                    self.state["loan_request"]["loan_type"] = "secured"
+                    self.state["loan_request"]["loan_type"] = "secured" # Mark as secured
                     self.state["loan_request"]["collateral"] = secured_offer["collateral"]["description"]
                     
                     self.state["stage"] = "approval"
@@ -864,7 +939,7 @@ What would you prefer?"""
 **Loan Details:**
 - Amount: ₹{requested_amount:,}
 - Collateral: {secured_offer['collateral']['description']}
-- LTV: {secured_offer['collateral']['ltv_ratio']}%
+- LTV: {secured_offer['collateral']['ltv_ratio']:.0f}%
 - Interest Rate: {interest_rate}% p.a.
 - Tenure: {tenure} months ({tenure//12} years)
 - Monthly EMI: ₹{emi:,}
@@ -915,6 +990,19 @@ Thank you for choosing Tata Capital!"""
         return response
     
     def _handle_approval(self, user_message: str) -> str:
+        
+        # --- FIX: Check for new loan request ---
+        user_lower = user_message.lower()
+        if any(word in user_lower for word in ["new loan", "one more", "another loan", "i need", "borrow", "lacs", "startup"]):
+            response = f"""I'm happy to help with a new loan! 
+            
+To start a fresh application, please type **'restart'**.
+
+This chat is for your just-approved loan of ₹{self.state['loan_request']['amount']:,}. Do you have any questions about *this* loan?"""
+            self.conversation_history.append({"role": "assistant", "content": response})
+            return response
+        # --- END FIX ---
+            
         if not user_message or user_message.isspace():
             response = "Thank you for choosing Tata Capital! Have a great day! 👋"
             self.conversation_history.append({"role": "assistant", "content": response})
@@ -938,7 +1026,9 @@ APPROVED LOAN DETAILS:
 
 YOUR ROLE:
 - Answer ANY questions they have naturally and helpfully, matching YOUR PERSONALITY.
-- Keep responses concise (2-4 sentences)
+- **CRITICAL: This conversation is ONLY about the loan that was just approved.**
+- **DO NOT, under any circumstances, discuss a new loan, new amounts, or new applications.**
+- If the user asks for a new loan (e.g., "I need one more loan", "I need 4 lacs"), you MUST respond *only* with: "I'm happy to help with a new loan! To start a fresh application, please type **'restart'**."
 
 COMMON QUESTIONS & ANSWERS:
 - Timeline: "Disbursement in 2-3 business days after documentation"
@@ -983,7 +1073,28 @@ If you have any specific questions, feel free to ask."""
     def _handle_rejection(self, user_message: str) -> str:
         user_lower = user_message.lower()
         
-        if any(word in user_lower for word in ["option 1", "secured", "collateral", "option1"]):
+        # --- NEGOTIATION LOOP: Check for "try that" ---
+        # This now also checks that there isn't collateral, or that the user said "option 1"
+        if "try that" in user_lower or ("option 1" in user_lower and not self.secured_loan_agent.parse_collateral(self.state["customer_data"].get("collateral", "None"))):
+            requested_amount = self.state["loan_request"].get("amount", 0)
+            pre_approved_limit = self.state["customer_data"]["pre_approved_limit"]
+            
+            # Suggest 85% of the requested amount, rounded to nearest 10k, but not less than pre-approved
+            suggested_amount = max(pre_approved_limit, int(requested_amount * 0.85 / 10000) * 10000)
+            
+            if suggested_amount >= requested_amount: # Don't suggest more than they asked
+                 suggested_amount = pre_approved_limit
+
+            self.state["loan_request"]["amount"] = suggested_amount
+            
+            # Rerun underwriting
+            self.state["stage"] = "underwriting"
+            response = f"Great! Let's try again with ₹{suggested_amount:,}. Re-evaluating your eligibility..."
+            self.conversation_history.append({"role": "assistant", "content": response})
+            return response + "\n\n" + self._handle_underwriting("")
+        
+        # --- SECURED LOAN PATH ---
+        if any(word in user_lower for word in ["secured", "collateral"]) or ("option 1" in user_lower and self.secured_loan_agent.parse_collateral(self.state["customer_data"].get("collateral", "None"))):
             secured_offer = self.secured_loan_agent.get_secured_loan_offer(self.state["customer_data"])
             
             if secured_offer["eligible"]:
@@ -1001,7 +1112,7 @@ If you have any specific questions, feel free to ask."""
 
 💰 **Loan Offer:**
 - Maximum Amount: ₹{secured_offer['max_amount']:,}
-- Loan-to-Value (LTV): {collateral['ltv_ratio']}%
+- Loan-to-Value (LTV): {collateral['ltv_ratio']:.0f}%
 - Interest Rate: {secured_offer['interest_rate']}% p.a. (Lower than unsecured!)
 - Tenure: {secured_offer['min_tenure']}-{secured_offer['max_tenure']} months
 - Processing Fee: {secured_offer['processing_fee']}
@@ -1021,53 +1132,19 @@ Would you like to accept your pre-approved ₹{self.state['customer_data']['pre_
                 self.conversation_history.append({"role": "assistant", "content": response})
                 return response
         
+        # --- REVERT/CHANGE AMOUNT PATH ---
         if any(word in user_lower for word in ["change", "update", "lacs", "thousand", "amount", "tenure", "go back", "revert"]):
             self.state["stage"] = "needs_assessment"
             response = "Okay, let's review your loan request again. "
             self.conversation_history.append({"role": "assistant", "content": response})
             return response + self._handle_needs_assessment(user_message)
 
-        if self.state.get("awaiting_secured_loan_decision"):
-            if any(word in user_lower for word in ["apply", "option 1", "secured loan"]):
-                self.state["awaiting_secured_loan_decision"] = False
-                self.state["stage"] = "completed"
-                self.state["final_decision"] = "FORWARDED_SECURED"
-                response = f"""Great! I've flagged your profile for our secured loan department. 
-A specialist will reach out to you at {self.state['customer_data']['phone']} within 24 hours.
-Thank you for exploring all options with us!"""
-                self.conversation_history.append({"role": "assistant", "content": response})
-                return response
-            
-            elif self._is_affirmative(user_lower) or "option 2" in user_lower:
-                self.state["awaiting_secured_loan_decision"] = False
-                pass
-            
-            else:
-                response = "Sorry, I didn't catch that. Would you like to 'apply for secured loan' or 'accept pre-approved'?"
-                self.conversation_history.append({"role": "assistant", "content": response})
-                return response
+        # --- PRE-APPROVED LOAN PATH ---
+        if self._is_affirmative(user_lower) or "option 2" in user_lower or "option 3" in user_lower: # "yes" or "option 2/3" (if no collateral)
+            return self._process_pre_approved_loan()
         
-        if self._is_affirmative(user_lower) or "option 2" in user_lower:
-            self.state["loan_request"]["amount"] = self.state["customer_data"]["pre_approved_limit"]
-            self.state["loan_request"]["purpose"] = self.state["loan_request"].get("purpose", "personal")
-            
-            interest_rate = 12.5
-            tenure = self.state["loan_request"].get("tenure", 24)
-            monthly_rate = interest_rate / (12 * 100)
-            self.state["loan_request"]["interest_rate"] = interest_rate
-            self.state["loan_request"]["emi"] = int(
-                (self.state["loan_request"]["amount"] * monthly_rate * (1 + monthly_rate)**tenure) /
-                ((1 + monthly_rate)**tenure - 1)
-            )
-            
-            self.state["stage"] = "approval"
-            self.state["final_decision"] = "APPROVED"
-            response = f"""Perfect! Let me process your pre-approved loan of ₹{self.state['customer_data']['pre_approved_limit']:,}.
-Generating your sanction letter..."""
-            self.conversation_history.append({"role": "assistant", "content": response})
-            return response + "\n\n" + self._generate_sanction_letter()
-        
-        elif any(word in user_lower for word in ["option 3", "counsel", "credit improvement", "improve", "counseling"]):
+        # --- COUNSELING PATH ---
+        elif any(word in user_lower for word in ["counsel", "credit improvement", "improve", "counseling"]) or ("option 3" in user_lower) or ("option 4" in user_lower):
             response = f"""Great choice! Let me connect you with our credit counselor.
 📞 **Free Credit Counseling Session**
 Our expert will help you:
@@ -1080,41 +1157,9 @@ In the meantime, would you like to:
             self.conversation_history.append({"role": "assistant", "content": response})
             return response
         
+        # --- OTHER/HELP PATH ---
         elif any(keyword in user_lower for keyword in ["alternative", "what can", "help", "anything", "other", "explore"]):
-            collateral_info = self.secured_loan_agent.parse_collateral(
-                self.state["customer_data"].get("collateral", "None")
-            )
-            
-            if collateral_info:
-                response = f"""I understand, {self.state['customer_data']['name']}. Here are your options:
-**Option 1: Secured Loan 🏠**
-- Using your {collateral_info['type'].title()}
-- Up to ₹{collateral_info['max_loan']:,} at {collateral_info['interest_rate']}%
-- **Say "option 1" or "secured loan"**
-
-**Option 2: Pre-Approved Amount ✅**
-- Amount: ₹{self.state['customer_data']['pre_approved_limit']:,}
-- **Say "yes" or "option 2"**
-
-**Option 3: Credit Improvement 📈**
-- Your score: {self.state.get('credit_score', 'N/A')}/900
-- **Say "option 3" or "counseling"**
-
-Which interests you?"""
-            else:
-                response = f"""I understand, {self.state['customer_data']['name']}. Here are your options:
-**Option 1: Pre-Approved Amount ✅**
-- Amount: ₹{self.state['customer_data']['pre_approved_limit']:,}
-- **Say "yes" or "option 1"**
-
-**Option 2: Credit Improvement 📈**
-- Your score: {self.state.get('credit_score', 'N/A')}/900
-- **Say "option 2" or "counseling"**
-
-Which interests you?"""
-            
-            self.conversation_history.append({"role": "assistant", "content": response})
-            return response
+            return self._send_rejection_options()
         
         elif any(word in user_lower for word in ["fuck", "shit", "wtf", "stupid", "useless", "bro"]):
             response = f"""I'm really sorry for the frustration, {self.state['customer_data']['name']}. I want to help.
@@ -1123,27 +1168,75 @@ Type **"yes"** - I'll instantly approve your ₹{self.state['customer_data']['pr
             self.conversation_history.append({"role": "assistant", "content": response})
             return response
         
+        # --- DEFAULT: RE-PROMPT WITH ALL OPTIONS ---
         else:
-            collateral_info = self.secured_loan_agent.parse_collateral(
-                self.state["customer_data"].get("collateral", "None")
+            return self._send_rejection_options()
+            
+    def _process_pre_approved_loan(self) -> str:
+        """Helper to process the pre-approved amount"""
+        self.state["loan_request"]["amount"] = self.state["customer_data"]["pre_approved_limit"]
+        self.state["loan_request"]["purpose"] = self.state["loan_request"].get("purpose", "personal")
+        
+        interest_rate = 12.5
+        tenure = self.state["loan_request"].get("tenure", 24)
+        monthly_rate = interest_rate / (12 * 100)
+        self.state["loan_request"]["interest_rate"] = interest_rate
+        if (1 + monthly_rate)**tenure - 1 == 0:
+            emi = int(self.state["loan_request"]["amount"] / tenure)
+        else:
+            emi = int(
+                (self.state["loan_request"]["amount"] * monthly_rate * (1 + monthly_rate)**tenure) /
+                ((1 + monthly_rate)**tenure - 1)
             )
-            
-            if collateral_info:
-                response = f"""I understand this is disappointing, {self.state['customer_data']['name']}.
-Let me make it simple. Just type:
-- **"secured loan"** → Get up to ₹{collateral_info['max_loan']:,} using your collateral
-- **"yes"** → Get ₹{self.state['customer_data']['pre_approved_limit']:,} approved instantly
-- **"counseling"** → Free credit advice
-(Or say "change amount" to try a different amount)"""
-            else:
-                response = f"""I understand this is disappointing, {self.state['customer_data']['name']}.
-Let me make it simple. Just type:
-- **"yes"** → Get ₹{self.state['customer_data']['pre_approved_limit']:,} approved instantly
-- **"counseling"** → Free credit advice
-(Or say "change amount" to try a different amount)"""
-            
-            self.conversation_history.append({"role": "assistant", "content": response})
-            return response
+        self.state["loan_request"]["emi"] = emi
+        
+        self.state["stage"] = "approval"
+        self.state["final_decision"] = "APPROVED"
+        response = f"""Perfect! Let me process your pre-approved loan of ₹{self.state['customer_data']['pre_approved_limit']:,}.
+Generating your sanction letter..."""
+        self.conversation_history.append({"role": "assistant", "content": response})
+        return response + "\n\n" + self._generate_sanction_letter()
+
+    def _send_rejection_options(self) -> str:
+        """Helper to send the list of rejection options"""
+        collateral_info = self.secured_loan_agent.parse_collateral(
+            self.state["customer_data"].get("collateral", "None")
+        )
+        
+        # Propose a new amount
+        requested_amount = self.state["loan_request"].get("amount", 0)
+        pre_approved_limit = self.state["customer_data"]["pre_approved_limit"]
+        
+        # Suggest 85% of the requested amount, rounded to nearest 10k, but not less than pre-approved
+        suggested_amount = max(pre_approved_limit, int(requested_amount * 0.85 / 10000) * 10000)
+        
+        if suggested_amount >= requested_amount: # Don't suggest more than they asked
+                 suggested_amount = pre_approved_limit
+        
+        if collateral_info:
+            response = f"""I understand this is disappointing, {self.state['customer_data']['name']}.
+The amount of ₹{requested_amount:,} couldn't be approved as an unsecured loan.
+
+However, we can try a few other options:
+1. **Try a lower amount:** How about we try for **₹{suggested_amount:,}**? (Say "try that" or "option 1")
+2. **Secured Loan:** Get up to **₹{collateral_info['max_loan']:,}** using your collateral (Say "secured loan" or "option 2")
+3. **Accept Pre-approved:** Get **₹{pre_approved_limit:,}** instantly (Say "yes" or "option 3")
+4. **Credit Counseling:** Free advice (Say "counseling" or "option 4")
+
+(Or say "change amount" to enter a different number)"""
+        else:
+            response = f"""I understand this is disappointing, {self.state['customer_data']['name']}.
+The amount of ₹{requested_amount:,} couldn't be approved.
+
+However, we can try a few other options:
+1. **Try a lower amount:** How about we try for **₹{suggested_amount:,}**? (Say "try that" or "option 1")
+2. **Accept Pre-approved:** Get **₹{pre_approved_limit:,}** instantly (Say "yes" or "option 2")
+3. **Credit Counseling:** Free advice (Say "counseling" or "option 3")
+
+(Or say "change amount" to enter a different number)"""
+        
+        self.conversation_history.append({"role": "assistant", "content": response})
+        return response
     
     def _get_rejection_reason(self) -> str:
         if self.state["credit_score"] and self.state["credit_score"] < 700:

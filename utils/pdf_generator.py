@@ -21,7 +21,6 @@ def generate_sanction_letter(customer_data, loan_details):
     date_str = datetime.now().strftime("%Y%m%d")
     filename = f"sanction_letters/SanctionLetter_{customer_data['name'].replace(' ', '_')}_{date_str}.pdf"
     
-    # Create PDF
     doc = SimpleDocTemplate(
         filename,
         pagesize=A4,
@@ -31,10 +30,7 @@ def generate_sanction_letter(customer_data, loan_details):
         bottomMargin=0.75*inch
     )
     
-    # Container for PDF elements
     elements = []
-    
-    # Styles
     styles = getSampleStyleSheet()
     
     # Custom styles
@@ -65,13 +61,18 @@ def generate_sanction_letter(customer_data, loan_details):
         leading=14
     )
     
-    # Add Logo/Header
     header_text = "🏦 TATA CAPITAL"
     header = Paragraph(header_text, title_style)
     elements.append(header)
     
-    # Add subtitle
-    subtitle = Paragraph("<b>LOAN SANCTION LETTER</b>", ParagraphStyle(
+    # --- UPDATED: Check for loan type for title ---
+    loan_type = loan_details.get("loan_type", "personal").upper()
+    if "SECURED" in loan_type:
+        subtitle_text = "<b>SECURED LOAN SANCTION LETTER</b>"
+    else:
+        subtitle_text = "<b>PERSONAL LOAN SANCTION LETTER</b>"
+        
+    subtitle = Paragraph(subtitle_text, ParagraphStyle(
         'Subtitle',
         parent=styles['Normal'],
         fontSize=14,
@@ -81,7 +82,6 @@ def generate_sanction_letter(customer_data, loan_details):
     ))
     elements.append(subtitle)
     
-    # Add date and reference
     date_ref = Paragraph(
         f"<b>Date:</b> {datetime.now().strftime('%d %B %Y')}<br/>"
         f"<b>Reference No:</b> TC/PL/{datetime.now().strftime('%Y%m%d')}/{customer_data['id']}",
@@ -90,7 +90,6 @@ def generate_sanction_letter(customer_data, loan_details):
     elements.append(date_ref)
     elements.append(Spacer(1, 20))
     
-    # Customer Details Section
     elements.append(Paragraph("📋 Customer Details", heading_style))
     
     customer_table_data = [
@@ -118,24 +117,32 @@ def generate_sanction_letter(customer_data, loan_details):
     elements.append(customer_table)
     elements.append(Spacer(1, 20))
     
-    # Loan Details Section
     elements.append(Paragraph("💰 Loan Details", heading_style))
     
-    # Calculate total payable
     total_payable = loan_details['emi'] * loan_details['tenure']
     total_interest = total_payable - loan_details['amount']
     
+    # --- UPDATED: Add Secured Loan fields ---
     loan_table_data = [
         ['Loan Amount:', f"₹{loan_details['amount']:,}"],
         ['Interest Rate:', f"{loan_details['interest_rate']}% per annum"],
         ['Loan Tenure:', f"{loan_details['tenure']} months ({loan_details['tenure']//12} years)"],
         ['Monthly EMI:', f"₹{loan_details['emi']:,}"],
-        ['Total Interest:', f"₹{total_interest:,}"],
-        ['Total Payable:', f"₹{total_payable:,}"],
-        ['Loan Purpose:', loan_details['purpose'].replace('_', ' ').title()],
-        ['Processing Fee:', '₹0 (Waived)'],
-        ['Disbursement Mode:', 'Direct Bank Transfer']
+        ['Total Interest:', f"₹{total_interest:,.0f}"], # Use .0f for cleaner formatting
+        ['Total Payable:', f"₹{total_payable:,.0f}"], # Use .0f
+        ['Loan Purpose:', loan_details['purpose'].replace('_', ' ').title()]
     ]
+    
+    # Dynamically add secured loan info if it exists
+    if "secured" in loan_type.lower():
+        loan_table_data.append(['Loan Type:', 'Secured Loan'])
+        loan_table_data.append(['Collateral Pledged:', loan_details.get('collateral', 'N/A')])
+    else:
+        loan_table_data.append(['Loan Type:', 'Unsecured Personal Loan'])
+        
+    loan_table_data.append(['Processing Fee:', '₹0 (Waived)'])
+    loan_table_data.append(['Disbursement Mode:', 'Direct Bank Transfer'])
+    # --- END OF UPDATE ---
     
     loan_table = Table(loan_table_data, colWidths=[2*inch, 4*inch])
     loan_table.setStyle(TableStyle([
@@ -148,14 +155,13 @@ def generate_sanction_letter(customer_data, loan_details):
         ('TOPPADDING', (0, 0), (-1, -1), 8),
         ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
         ('ROWBACKGROUNDS', (0, 0), (-1, -1), [colors.white, colors.HexColor('#f5f5f5')]),
-        ('BACKGROUND', (-1, 3), (-1, 3), colors.HexColor('#c5e1a5')),  # Highlight EMI
-        ('FONTNAME', (-1, 3), (-1, 3), 'Helvetica-Bold')
+        ('BACKGROUND', (0, 3), (1, 3), colors.HexColor('#c5e1a5')),  # Highlight EMI
+        ('FONTNAME', (0, 3), (1, 3), 'Helvetica-Bold')
     ]))
     
     elements.append(loan_table)
     elements.append(Spacer(1, 20))
     
-    # Terms & Conditions
     elements.append(Paragraph("📜 Terms & Conditions", heading_style))
     
     terms = [
@@ -164,10 +170,15 @@ def generate_sanction_letter(customer_data, loan_details):
         "3. Prepayment is allowed after 6 months with no additional charges.",
         "4. Late payment will attract a penalty of 2% per month on the overdue amount.",
         "5. The loan is subject to final documentation and verification.",
-        "6. Disbursement will be done within 2-3 business days post-documentation.",
-        "7. This sanction is valid for 30 days from the date of issue."
+        "6. Disbursement will be done within 2-3 business days post-documentation."
     ]
     
+    if "secured" in loan_type.lower():
+        terms.append("7. The approved loan amount is secured against the collateral provided: " + loan_details.get('collateral', 'N/A') + ".")
+        terms.append("8. This sanction is valid for 30 days from the date of issue.")
+    else:
+        terms.append("7. This sanction is valid for 30 days from the date of issue.")
+        
     for term in terms:
         elements.append(Paragraph(term, ParagraphStyle(
             'Terms',
@@ -180,7 +191,6 @@ def generate_sanction_letter(customer_data, loan_details):
     
     elements.append(Spacer(1, 30))
     
-    # Signature Section
     elements.append(Paragraph("✍️ Authorized Signatory", heading_style))
     elements.append(Spacer(1, 40))
     
@@ -201,7 +211,6 @@ def generate_sanction_letter(customer_data, loan_details):
     elements.append(signature_table)
     elements.append(Spacer(1, 20))
     
-    # Footer
     footer = Paragraph(
         "<i>This is a system-generated document and does not require a physical signature for validation.</i><br/>"
         "<b>Tata Capital Limited</b> | Customer Care: 1800-123-4567 | www.tatacapital.com",
@@ -215,32 +224,8 @@ def generate_sanction_letter(customer_data, loan_details):
     )
     elements.append(footer)
     
-    # Build PDF
     doc.build(elements)
     
     print(f"\n✅ Sanction letter generated: {filename}\n")
     
     return filename
-
-
-# Test
-if __name__ == "__main__":
-    test_customer = {
-        "id": "C01",
-        "name": "Riya Sharma",
-        "phone": "7303201137",
-        "email": "riya.sharma@email.com",
-        "address": "Block A, Sector 15, Rohini",
-        "city": "Delhi"
-    }
-    
-    test_loan = {
-        "amount": 500000,
-        "tenure": 24,
-        "purpose": "wedding",
-        "interest_rate": 11.0,
-        "emi": 23303
-    }
-    
-    generate_sanction_letter(test_customer, test_loan)
-    print("Open the PDF with a PDF reader (not text editor)!")
