@@ -7,17 +7,50 @@ from main import MasterAgent
 import json
 from datetime import datetime, timedelta
 
-load_dotenv()
+import os
+from dotenv import load_dotenv
+
+# Force load the .env from current directory
+env_path = os.path.join(os.path.dirname(__file__), ".env")
+print("Loading .env from:", env_path)
+load_dotenv(dotenv_path=env_path)
+
+# Debug print values
+print("GROQ_API_KEY:", os.getenv("GROQ_API_KEY"))
+print("TWILIO_ACCOUNT_SID:", os.getenv("TWILIO_ACCOUNT_SID"))
+print("TWILIO_AUTH_TOKEN:", os.getenv("TWILIO_AUTH_TOKEN"))
+print("TWILIO_WHATSAPP_NUMBER:", os.getenv("TWILIO_WHATSAPP_NUMBER"))
+
+# Check if loaded
+if not all([
+    os.getenv("GROQ_API_KEY"),
+    os.getenv("TWILIO_ACCOUNT_SID"),
+    os.getenv("TWILIO_AUTH_TOKEN"),
+    os.getenv("TWILIO_WHATSAPP_NUMBER")
+]):
+    print("❌ ERROR: Missing credentials! Please check your .env file.")
+    exit()
+else:
+    print("✅ All credentials loaded successfully.")
+
 
 app = Flask(__name__)
 
 # Twilio credentials
+# Twilio credentials (loaded from .env)
 TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID")
 TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN")
-TWILIO_WHATSAPP_NUMBER = os.getenv("TWILIO_WHATSAPP_NUMBER")  # e.g., whatsapp:+14155238886
+TWILIO_WHATSAPP_NUMBER = os.getenv("TWILIO_WHATSAPP_NUMBER")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
+
 client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
+
+if not all([GROQ_API_KEY, TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_WHATSAPP_NUMBER]):
+    print("❌ ERROR: Missing credentials! Please check your .env file.")
+    exit()
+else:
+    print("✅ All credentials loaded successfully.")
 
 # In-memory session storage (use Redis in production)
 # Structure: {phone_number: {"agent": MasterAgent, "last_activity": datetime}}
@@ -97,65 +130,30 @@ def webhook():
         
         print(f"📱 Received from {from_number}: {incoming_msg}")
         
-        # Handle special commands
-        if incoming_msg.lower() in ['restart', 'reset', 'start over']:
-            # Delete existing session
-            if from_number in sessions:
-                del sessions[from_number]
-                print(f"🔄 Restarted session for {from_number}")
-            
-            # Create new session and send welcome message
-            agent = get_or_create_session(from_number)
-            welcome_msg = agent.start_conversation()
-            send_whatsapp_message(from_number, welcome_msg)
-            return str(MessagingResponse())
-        
         # Get or create agent for this user
         agent = get_or_create_session(from_number)
-        
-        # Check if this is the first message (agent hasn't started)
+
+        # Handle first message
         if not agent.conversation_history:
-            # Start conversation
-            welcome_msg = agent.start_conversation()
-            send_whatsapp_message(from_number, welcome_msg)
-            return str(MessagingResponse())
-        
-        # Process the message through the MasterAgent
-        response = agent.process_message(incoming_msg)
-        
-        # Check if a sanction letter was generated
-        if agent.state.get("stage") == "approval" and agent.state.get("final_decision"):
-            # Extract PDF path from conversation if sanction letter was generated
-            if "sanction_letters/" in response:
-                # Try to find the PDF path in the response
-                import re
-                pdf_match = re.search(r'(sanction_letters/[^\s]+\.pdf)', response)
-                if pdf_match:
-                    pdf_path = pdf_match.group(1)
-                    
-                    # For Twilio, you need to host the PDF publicly
-                    # For now, we'll just send the text response
-                    # TODO: Upload PDF to cloud storage (AWS S3, Azure Blob, etc.) and get public URL
-                    send_whatsapp_message(from_number, response)
-                    send_whatsapp_message(
-                        from_number, 
-                        f"📄 Your sanction letter has been generated! Please visit our office or we'll email it to you."
-                    )
-                else:
-                    send_whatsapp_message(from_number, response)
-            else:
-                send_whatsapp_message(from_number, response)
+            reply_text = agent.start_conversation()
         else:
-            # Send normal response
-            send_whatsapp_message(from_number, response)
-        
-        return str(MessagingResponse())
-        
+            reply_text = agent.process_message(incoming_msg)
+
+        print(f"🤖 Replying with: {reply_text}")
+
+        # --- ✅ IMPORTANT PART ---
+        # Return TwiML so Twilio shows message immediately
+        resp = MessagingResponse()
+        resp.message(reply_text)
+        return str(resp)
+
     except Exception as e:
         print(f"❌ Error in webhook: {e}")
-        error_msg = "I'm sorry, something went wrong. Please try again or type 'restart' to start over."
-        send_whatsapp_message(from_number, error_msg)
-        return str(MessagingResponse())
+        resp = MessagingResponse()
+        resp.message("Sorry! Something went wrong. Please try again later.")
+        return str(resp)
+
+
 
 
 @app.route("/status", methods=["GET"])
