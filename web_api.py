@@ -101,20 +101,6 @@ def chat():
         "final_decision": agent.state.get("final_decision"),
     })
 
-from user_store import get_applications
-
-@app.get("/api/profile")
-def profile():
-    # simple auth: frontend passes user_id as query or header
-    user_id = request.args.get("user_id")
-    if not user_id:
-        return jsonify({"error": "user_id required"}), 400
-
-    apps = get_applications(user_id)
-    return jsonify({
-        "user_id": user_id,
-        "applications": apps,
-    })
 
 @app.get("/api/status")
 def status():
