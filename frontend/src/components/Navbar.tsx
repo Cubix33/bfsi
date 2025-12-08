@@ -63,8 +63,7 @@ const Navbar = () => {
           </Link>
         </div>
 
-        <div className="flex items-center gap-3">
-          {/* 👇 Hide Sign In after being clicked once (persists across reloads) */}
+               <div className="flex items-center gap-3">
           {!isSignedIn && (
             <Link to="/login" onClick={handleSignIn}>
               <Button variant="ghost" size="sm">
@@ -79,17 +78,28 @@ const Navbar = () => {
             </Button>
           </Link>
 
-          {/* Optional: visible only if logged in */}
+          {/* NEW: Visit Profile (Dashboard) when logged in */}
+          {isSignedIn && (
+            <Link to="/dashboard">
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-xs text-muted-foreground hover:text-primary"
+              >
+                Visit Profile
+              </Button>
+            </Link>
+          )}
+
           {isSignedIn && (
             <Link to="/" onClick={handleLogout}>
-
-            <Button
-              variant="outline"
-              size="sm"
-              className="text-xs text-muted-foreground hover:text-primary"
-            >
-              Log Out
-            </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-xs text-muted-foreground hover:text-primary"
+              >
+                Log Out
+              </Button>
             </Link>
           )}
         </div>

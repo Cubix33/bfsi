@@ -14,6 +14,9 @@ from dotenv import load_dotenv
 import platform
 import subprocess
 import re
+from user_store import add_application
+from uuid import uuid4
+from datetime import datetime
 
 def open_pdf(filepath):
     """Open PDF file with default PDF viewer"""

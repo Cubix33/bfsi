@@ -15,7 +15,7 @@ const Approval = () => {
   }, []);
 
   const loanDetails = {
-    customerName: "John Doe",
+    customerName: "Riya Sharma",
     loanAmount: 500000,
     tenure: 36,
     interestRate: 10.5,
@@ -24,9 +24,10 @@ const Approval = () => {
   };
 
   const handleDownload = () => {
-    // In real app, this would trigger PDF download
-    window.open("/sanction-letter/TCSL2025001234", "_blank");
-  };
+  // This must match the actual filename on disk:
+  const fileName = "SanctionLetter_Riya_Sharma_20251027.pdf";
+  window.open(`/sanction_letters/${fileName}`, "_blank");
+};
 
   return (
     <div className="min-h-screen bg-gradient-subtle relative overflow-hidden">

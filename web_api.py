@@ -51,6 +51,28 @@ def get_or_create_session(session_id: str) -> MasterAgent:
     agent.start_conversation()
     return agent
 
+from user_store import get_applications
+
+@app.get("/api/profile")
+def profile():
+    # simple auth: frontend passes user_id as query or header
+    user_id = request.args.get("user_id")
+    if not user_id:
+        return jsonify({"error": "user_id required"}), 400
+
+    apps = get_applications(user_id)
+    return jsonify({
+        "user_id": user_id,
+        "applications": apps,
+    })
+    
+from flask import send_from_directory
+
+SANCTION_DIR = os.path.join(os.path.dirname(__file__), "sanction_letters")
+
+@app.route("/sanction_letters/<path:filename>")
+def download_sanction_letter(filename):
+    return send_from_directory(SANCTION_DIR, filename, as_attachment=True)
 
 @app.post("/api/chat")
 def chat():
