@@ -14,6 +14,9 @@ from dotenv import load_dotenv
 import platform
 import subprocess
 import re
+from user_store import add_application
+from uuid import uuid4
+from datetime import datetime
 
 
 def open_pdf(filepath):
@@ -971,6 +974,19 @@ Would you like to take the maximum amount of ₹{secured_offer['max_amount']:,}?
             customer_data=self.state["customer_data"],
             loan_details=self.state["loan_request"]
         )
+        user_id = self.state["customer_data"].get("email") or self.state["customer_data"].get("phone")
+        if user_id:
+            app_record = {
+            "id": str(uuid4()),
+            "created_at": datetime.now().isoformat(),
+            "status": "APPROVED",
+            "amount": self.state["loan_request"]["amount"],
+            "tenure": self.state["loan_request"]["tenure"],
+            "emi": self.state["loan_request"]["emi"],
+            "purpose": self.state["loan_request"].get("purpose"),
+            "sanction_letter_path": pdf_path,
+        }
+            add_application(user_id, app_record)
         response = f"""✅ Sanction Letter Generated Successfully!
 📄 Your sanction letter: {pdf_path}
 Opening PDF now...
