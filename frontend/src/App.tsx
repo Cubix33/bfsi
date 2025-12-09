@@ -15,6 +15,7 @@ import Approval from "./pages/Approval";
 import Dashboard from "./pages/Dashboard";
 import SanctionLetter from "./pages/SanctionLetter";
 import NotFound from "./pages/NotFound";
+import ProtectedRoute from "./routes/ProtectedRoute";
 
 const queryClient = new QueryClient();
 
@@ -28,6 +29,8 @@ const App = () => (
           <Route path="/" element={<Landing />} />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
+          <Route element={<ProtectedRoute />}>
+
           <Route path="/chat" element={<Chat />} />
           <Route path="/summary" element={<Summary />} />
           <Route path="/verify" element={<Verification />} />
@@ -36,8 +39,9 @@ const App = () => (
           <Route path="/approval" element={<Approval />} />
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/sanction-letter/:id" element={<SanctionLetter />} />
-          {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
+          </Route>
+
         </Routes>
       </BrowserRouter>
     </TooltipProvider>
