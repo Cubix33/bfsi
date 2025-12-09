@@ -4,8 +4,26 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Send, Upload, Bot, User } from "lucide-react";
+import { Send, Upload, Bot, User} from "lucide-react";
 import Navbar from "@/components/Navbar";
+import { Languages } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+
+const LANGUAGES = {
+  en: { name: "English", flag: "🇬🇧" },
+  hi: { name: "हिंदी", flag: "🇮🇳" },
+  ta: { name: "தமிழ்", flag: "🇮🇳" },
+  te: { name: "తెలుగు", flag: "🇮🇳" },
+  bn: { name: "বাংলা", flag: "🇮🇳" },
+  mr: { name: "मराठी", flag: "🇮🇳" },
+  gu: { name: "ગુજરાતી", flag: "🇮🇳" },
+};
 
 type Message = {
   role: "user" | "assistant";
@@ -22,6 +40,7 @@ const Chat = () => {
   const [isTyping, setIsTyping] = useState(false);
   const [currentStage, setCurrentStage] = useState(1);
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [language, setLanguage] = useState("en");
 
   const stages = [
     "Initial",
@@ -64,6 +83,7 @@ const Chat = () => {
         body: JSON.stringify({
           session_id: sessionId,
           message: text,
+          language: language,
         }),
       });
       const data = await res.json();
@@ -149,6 +169,40 @@ const Chat = () => {
     sendToBackend(`I have uploaded my salary slip: ${file.name}`);
   };
 
+  const handleLanguageChange = async (newLang: string) => {
+  setLanguage(newLang);
+  
+  // Clear and restart session
+  const newSid = crypto.randomUUID();
+  localStorage.setItem("loan_session_id", newSid);
+  setSessionId(newSid);
+  setMessages([]);
+  setIsTyping(true);
+
+  // Get greeting in new language
+  try {
+    const res = await fetch(`/api/chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        session_id: newSid,
+        message: "__INIT__",
+        language: newLang,
+      }),
+    });
+    const data = await res.json();
+    setMessages([{
+      role: "assistant",
+      content: data.reply,
+      timestamp: new Date(),
+    }]);
+  } catch (err) {
+    console.log(err);
+  } finally {
+    setIsTyping(false);
+  }
+};
+
   const handleUploadClick = () => {
     fileInputRef.current?.click();
   };
@@ -202,7 +256,7 @@ const Chat = () => {
                       variant="outline"
                       className="bg-success/10 text-success border-success"
                     >
-                      Excellent
+                      Should be &gt;700 ideally 
                     </Badge>
                   </div>
                   <div className="flex justify-between">
@@ -210,7 +264,7 @@ const Chat = () => {
                       Pre-approved Limit
                     </span>
                     <span className="font-semibold text-foreground">
-                      ₹5,00,000
+                      up to ₹10,00,000
                     </span>
                   </div>
                 </div>
@@ -222,19 +276,41 @@ const Chat = () => {
           <div className="lg:col-span-3">
             <Card className="h-[calc(100vh-6rem)] flex flex-col text-base leading-relaxed">
               {/* Header */}
-              <div className="p-6 border-b bg-gradient-primary text-white rounded-t-lg">
-                <div className="flex items-center gap-3">
-                  <div className="w-14 h-14 rounded-full bg-white/20 flex items-center justify-center">
-                    <Bot className="h-7 w-7" />
-                  </div>
-                  <div>
-                    <h2 className="font-semibold text-xl">AI Loan Assistant</h2>
-                    <p className="text-sm text-white/80">
-                      Online • Ready to help
-                    </p>
-                  </div>
-                </div>
-              </div>
+              {/* Header */}
+<div className="p-6 border-b bg-gradient-primary text-white rounded-t-lg">
+  <div className="flex items-center justify-between">
+    <div className="flex items-center gap-3">
+      <div className="w-14 h-14 rounded-full bg-white/20 flex items-center justify-center">
+        <Bot className="h-7 w-7" />
+      </div>
+      <div>
+        <h2 className="font-semibold text-xl">AI Loan Assistant</h2>
+        <p className="text-sm text-white/80">
+          Online • Ready to help
+        </p>
+      </div>
+    </div>
+    
+    {/* Language Selector */}
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="outline" size="sm" className="bg-white/10 border-white/20 text-white hover:bg-white/20">
+          <Languages className="mr-2 h-4 w-4" />
+          {LANGUAGES[language].flag} {LANGUAGES[language].name}
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent>
+        <DropdownMenuRadioGroup value={language} onValueChange={handleLanguageChange}>
+          {Object.entries(LANGUAGES).map(([code, { name, flag }]) => (
+            <DropdownMenuRadioItem key={code} value={code}>
+              {flag} {name}
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  </div>
+</div>
 
               {/* Messages */}
               <div className="flex-1 overflow-y-auto p-8 space-y-5">
