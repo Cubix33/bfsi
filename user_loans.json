@@ -1,0 +1,24 @@
+{
+  "harshdip@email.com": [
+    {
+      "id": "3da13e5d-4318-4a3a-98ab-498b07dc9a7a",
+      "created_at": "2025-12-09T13:45:24.213196",
+      "status": "APPROVED",
+      "amount": 1950000,
+      "tenure": 48,
+      "emi": 48990,
+      "purpose": "wedding",
+      "sanction_letter_path": "sanction_letters/SanctionLetter_to_Harshdip_20251209.pdf"
+    },
+    {
+      "id": "7840301f-0f10-44b3-9cd3-87febc017cd8",
+      "created_at": "2025-12-09T14:22:51.846021",
+      "status": "APPROVED",
+      "amount": 1950000,
+      "tenure": 120,
+      "emi": 25232,
+      "purpose": "wedding",
+      "sanction_letter_path": "sanction_letters/SanctionLetter_harshdip_20251209.pdf"
+    }
+  ]
+}

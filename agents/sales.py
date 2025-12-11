@@ -1,4 +1,3 @@
-from openai import OpenAI
 from typing import Dict, List, Any, Optional
 import json
 import re
@@ -15,7 +14,8 @@ class SalesAgent:
     
     def __init__(self, api_key: str):
         self.client = Groq(api_key=api_key)
-        self.model = "openai/gpt-oss-20b"  # <-- Using the model you requested
+        # Using Llama 3 70B for better instruction following regarding formatting
+        self.model = "openai/gpt-oss-20b" 
         self.conversation_context = []
         
     def negotiate_loan(
@@ -63,11 +63,14 @@ class SalesAgent:
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=messages,
-                temperature=0.7,
-                max_tokens=800, 
+                temperature=0.6, # Slightly lower temperature for more stable formatting
+                max_tokens=600, 
             )
             
             assistant_message = response.choices[0].message.content.strip()
+            
+            # CRITICAL: Force remove asterisks and emojis if LLM leaks them
+            assistant_message = assistant_message.replace('*', '').replace('✨', '').replace('🎉', '')
             
             extraction_match = re.search(r'\[EXTRACTION:amount=(\d+),tenure=(\d+),purpose=([^\]]+)\]', assistant_message)
             if extraction_match:
@@ -106,87 +109,53 @@ class SalesAgent:
 - Loan Amount: {current_loan_details.get('amount', 'Not specified')}
 - Loan Tenure: {current_loan_details.get('tenure', 'Not specified')}
 - Loan Purpose: {current_loan_details.get('purpose', 'Not specified')}
-- **Calculated Interest Rate:** {current_loan_details.get('interest_rate', 'Not specified')}
-- **Calculated EMI:** {current_loan_details.get('emi', 'Not specified')}
+- Calculated Interest Rate: {current_loan_details.get('interest_rate', 'Not specified')}
+- Calculated EMI: {current_loan_details.get('emi', 'Not specified')}
 """
 
-        base_prompt = f"""You are Arjun, a personal loan advisor at Tata Capital. You're talking to {customer_data['name']}.
+        base_prompt = f"""You are Arjun, a personal loan advisor at Tata Capital. You are talking to {customer_data['name']}.
 
 CUSTOMER PROFILE:
 - Name: {customer_data['name']}
-- Pre-approved Limit: ₹{customer_data['pre_approved_limit']:,}
-- CIBIL Score: {customer_data['credit_score']}/900
-- Internal Safety Score: {customer_data.get('internal_safety_score', 0.5):.0%}
-- Monthly Income: ₹{customer_data['monthly_income']:,}
-- Collateral: {customer_data.get('collateral', 'None')}
+- Pre-approved Limit: {customer_data['pre_approved_limit']}
+- Monthly Income: {customer_data['monthly_income']}
 
-YOUR PERSONALITY & MISSION (Follow these rules!):
-{personality_instructions}
+STRICT FORMATTING RULES:
+1. Do NOT use asterisks (*).
+2. Do NOT use bolding (**text**).
+3. Do NOT use emojis.
+4. Keep the tone natural, human, and conversational.
 
-WHAT YOU HAVE SO_FAR:
+YOUR GOAL:
+Gather the Loan Amount, Tenure, and Purpose.
+
+WHAT YOU HAVE SO FAR:
 {what_you_have_so_far}
 """
 
         if mode == "gather_info":
             return base_prompt + f"""
-YOUR GOAL:
-You are missing one or more pieces of information (Amount, Tenure, or Purpose). Your *only* job is to ask for what's missing.
-
-- If 'Loan Amount' is 'Not specified', ask for it.
-- If 'Loan Tenure' is 'Not specified', ask for it.
-- If 'Loan Purpose' is 'Not specified', ask for it.
-
-DO NOT mention the EMI. DO NOT use the [EXTRACTION] tag. Just ask for the info.
-
-Now, respond to {customer_data['name']}'s message.
+INSTRUCTIONS:
+You are missing one or more pieces of information (Amount, Tenure, or Purpose). 
+Ask for what is missing in a polite, human way.
+Do not mention the EMI yet.
 """
 
         elif mode == "present_emi":
-            # --- THIS IS THE UPDATED PROMPT WITH THE FIX ---
             return base_prompt + f"""
-***CRITICAL RULE: THE CONVERSATION FLOW***
-You have one job: get the user to agree to an UNSECURED loan EMI.
+INSTRUCTIONS:
+1. Present the Calculated EMI to the user clearly.
+   Example: "For 5 lakhs over 3 years, your EMI comes to about 16,310 at 10.75% interest. Does that fit your budget?"
 
-1.  **PRESENT THE CALCULATED EMI:**
-    -   Your system has calculated the EMI. It is in "WHAT YOU HAVE SO_FAR".
-    -   Your job is to PRESENT this EMI to the user.
-    -   **DO NOT DO THE MATH YOURSELF.** Just present the EMI you were given.
-    -   **Example (static):** "Great! For ₹5,00,000 over 3 years, our system calculates an EMI of about **₹16,310** at **10.75%**. How does that sound for your budget?"
+2. If the user hesitates (says it is too high), suggest extending the tenure.
 
-2.  **NEGOTIATE (Your Most Important Job!):**
-    -   **If the user hesitates** (e.g., "that's too high," "omg", "noooo"):
-    -   Your job is to negotiate a *new unsecured term*.
-    -   **DO** suggest extending the tenure (e.g., "We can stretch it to 5 years...") or lowering the amount (e.g., "What about we try for 12 lakhs?").
-    -   If the user agrees to a *new* unsecured term (e.g., "ok let's try 5 years"), acknowledge it. The system will loop, and you will get a new 'Calculated EMI' to present.
-    
-    -   **--- NEW RULE (THE FIX) ---**
-    -   **If the user asks for a SECURED LOAN** (e.g., "use my bhk apartment," "what about collateral?"):
-    -   Your *only* response is to finalize the *current rejected* loan so the next agent can take over.
-    -   **Example Response:** "That's a great idea. Using your collateral is definitely the best way to lower your EMI. Let me just finalize this request, and I'll pass you over to our secured loan department.
-    [EXTRACTION:amount={current_loan_details.get('amount')},tenure={current_loan_details.get('tenure')},purpose={current_loan_details.get('purpose')}]"
-    -   **--- END NEW RULE ---**
+3. If the user AGREES to the unsecured loan terms, append the extraction tag at the very end of your message:
+   [EXTRACTION:amount={current_loan_details.get('amount')},tenure={current_loan_details.get('tenure')},purpose={current_loan_details.get('purpose')}]
 
-3.  **CONFIRM & EXTRACT (Success):**
-    -   Only *after* the user has clearly agreed to the *unsecured* terms (e.g., "Yes, that works"), your *next* response is to confirm and *then* use the [EXTRACTION] tag.
-    -   **Example (static):** "Perfect! You're all set for the ₹500,000 over 36 months. Let's move to the next step!
-    [EXTRACTION:amount=500000,tenure=36,purpose=wedding]"
-
-4.  **CONFIRM & EXTRACT (Failure):**
-    -   If the user rejects all your *unsecured* offers (e.g., "no, that's still too high"):
-    -   Your *only* response is to finalize the *rejected* loan so the next agent can take over.
-    -   **Example (use the real numbers):** "I understand. It looks like we can't get this unsecured amount to work right now. Let me finalize this, and we can look at other options.
-    [EXTRACTION:amount={current_loan_details.get('amount')},tenure={current_loan_details.get('tenure')},purpose={current_loan_details.get('purpose')}]"
----
-
-IMPORTANT RULES:
-- ALWAYS follow the **CRITICAL RULE** above.
-- **NEVER** try to process a secured loan yourself. Your job is to hand it off.
-- NEVER use the [EXTRACTION:...] tag until the user has *either* agreed to a final unsecured EMI or *rejected* all your offers.
-
-Now, respond to {customer_data['name']}'s message."""
+4. If the user asks for a SECURED LOAN (collateral), finalize the current request so we can switch departments. Append the extraction tag.
+"""
         
-        # Fallback just in case
-        return base_prompt + "\n\nHow can I help you today?"
+        return base_prompt
 
     
     def _extract_loan_details(self, conversation_history: List[Dict]) -> Optional[Dict]:
@@ -197,6 +166,7 @@ Now, respond to {customer_data['name']}'s message."""
         
         details = {}
         
+        # Check if LLM already extracted it in the last turn
         if conversation_history and conversation_history[-1]["role"] == "assistant":
             last_msg = conversation_history[-1]["content"]
             extraction_match = re.search(r'\[EXTRACTION:amount=(\d+),tenure=(\d+),purpose=([^\]]+)\]', last_msg)
@@ -226,7 +196,7 @@ Now, respond to {customer_data['name']}'s message."""
                     tenure_found = True
             
             if not purpose_found:
-                purpose = self._extract_purpose(msg) # Check one message at a time
+                purpose = self._extract_purpose(msg)
                 if purpose:
                     details["purpose"] = purpose
                     purpose_found = True
@@ -234,7 +204,8 @@ Now, respond to {customer_data['name']}'s message."""
             if amount_found and tenure_found and purpose_found:
                 break
         
-        if "purpose" not in details:
+        # Fallback purpose extraction from combined text
+        if "purpose" not in details and user_messages_reversed:
             all_user_text = " ".join(user_messages_reversed)
             purpose = self._extract_purpose(all_user_text)
             if purpose:
@@ -244,43 +215,43 @@ Now, respond to {customer_data['name']}'s message."""
     
     def _extract_amount(self, text: str) -> Optional[int]:
         """Extract loan amount from text"""
-        lakh_pattern = r'(\d+(?:\.\d+)?)\s*(?:lakh|lac|lakhs|lacs|lacksm)'
-        lakh_match = re.search(lakh_pattern, text, re.IGNORECASE)
+        # 1. Lakhs/Lacs
+        lakh_match = re.search(r'(\d+(?:\.\d+)?)\s*(?:lakh|lac|l)', text, re.IGNORECASE)
         if lakh_match:
             return int(float(lakh_match.group(1)) * 100000)
         
-        crore_pattern = r'(\d+(?:\.\d+)?)\s*(?:crore|crores)'
-        crore_match = re.search(crore_pattern, text, re.IGNORECASE)
+        # 2. Crores
+        crore_match = re.search(r'(\d+(?:\.\d+)?)\s*(?:crore|cr)', text, re.IGNORECASE)
         if crore_match:
             return int(float(crore_match.group(1)) * 10000000)
 
-        rupee_pattern = r'(?:₹|rs\.?|rupees?)\s*([\d,]+)'
-        rupee_match = re.search(rupee_pattern, text, re.IGNORECASE)
-        if rupee_match:
-            return int(rupee_match.group(1).replace(',', ''))
-        
-        thousand_pattern = r'(\d+(?:\.\d+)?)\s*(?:thousand|k)'
-        thousand_match = re.search(thousand_pattern, text, re.IGNORECASE)
-        if thousand_match:
-            return int(float(thousand_match.group(1)) * 1000)
-        
-        number_pattern = r'\b(\d{5,9})\b'
-        number_match = re.search(number_pattern, text)
+        # 3. Thousands (k)
+        k_match = re.search(r'(\d+(?:\.\d+)?)\s*k', text, re.IGNORECASE)
+        if k_match:
+            return int(float(k_match.group(1)) * 1000)
+
+        # 4. Explicit numbers with commas
+        # Remove commas and look for large numbers
+        clean_text = text.replace(',', '')
+        number_match = re.search(r'\b(\d{4,9})\b', clean_text)
         if number_match:
-            if "phone" not in text and "pin" not in text and "code" not in text:
-                 return int(number_match.group(1))
+            # Simple filter to avoid confusing phone numbers/years if they appear in isolation
+            # (In a real app, this would be more context-aware)
+            val = int(number_match.group(1))
+            if 1000 < val < 100000000: 
+                return val
         
         return None
     
     def _extract_tenure(self, text: str) -> Optional[int]:
         """Extract loan tenure from text"""
-        year_pattern = r'(\d+)\s*(?:years?|yrs?|yearrs)'
-        year_match = re.search(year_pattern, text, re.IGNORECASE)
+        # Years
+        year_match = re.search(r'(\d+)\s*(?:years?|yrs?|y)', text, re.IGNORECASE)
         if year_match:
             return int(year_match.group(1)) * 12
         
-        month_pattern = r'(\d+)\s*(?:months?|mon)'
-        month_match = re.search(month_pattern, text, re.IGNORECASE)
+        # Months
+        month_match = re.search(r'(\d+)\s*(?:months?|mon|m)', text, re.IGNORECASE)
         if month_match:
             return int(month_match.group(1))
         
@@ -288,24 +259,22 @@ Now, respond to {customer_data['name']}'s message."""
     
     def _extract_purpose(self, text: str) -> Optional[str]:
         """Extract loan purpose from text"""
-        # --- FIX: Added "renovate" ---
         purpose_keywords = {
-            "business": ["business", "startup", "venture", "company", "expand", "expansion"],
-            "wedding": ["wedding", "marriage", "shaadi", "sisterw wedding", "fathere wedding"],
+            "business": ["business", "startup", "venture", "shop", "expansion"],
+            "wedding": ["wedding", "marriage", "shaadi", "function"],
             "medical": ["medical", "health", "hospital", "surgery", "treatment"],
-            "education": ["education", "study", "course", "college", "university"],
-            "travel": ["travel", "vacation", "holiday", "trip", "recreation"],
-            "home_renovation": ["renovate", "renovating", "renovation", "repair", "remodel", "home improvement", "painting"],
-            "debt_consolidation": ["debt", "consolidate", "pay off", "credit card"],
-            "emergency": ["emergency", "urgent", "immediate"],
-            "vehicle": ["car", "bike", "vehicle", "automobile"],
-            "personal": ["personal", "general", "use"]
+            "education": ["education", "study", "college", "fees", "school"],
+            "travel": ["travel", "vacation", "holiday", "trip"],
+            "renovation": ["renovate", "renovation", "repair", "construction", "interior"],
+            "debt": ["debt", "loan", "card", "pay off"],
+            "vehicle": ["car", "bike", "vehicle", "scooter"],
+            "personal": ["personal", "urgent", "need"]
         }
         for purpose, keywords in purpose_keywords.items():
             for keyword in keywords:
                 if keyword in text:
                     return purpose
-        return None # Return None if nothing found
+        return None
     
     def _has_complete_info(self, loan_details: Dict) -> bool:
         """Check if we have all required information"""
@@ -341,10 +310,6 @@ Now, respond to {customer_data['name']}'s message."""
             
         if amount <= 200000: base_rate -= 0.5
         elif amount >= 1000000: base_rate += 0.5
-        
-        # Add penalty for very large unsecured amounts
-        if amount > 2000000: base_rate += 1.0
-        if amount > 5000000: base_rate += 1.5 # Extra penalty for 99L
         
         if tenure <= 12: base_rate -= 0.5
         elif tenure >= 48: base_rate += 0.5
