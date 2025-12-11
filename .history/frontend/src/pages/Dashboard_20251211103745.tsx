@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, FileText, TrendingUp, Clock, MessageCircle } from "lucide-react";
+import { Plus, FileText, TrendingUp, Clock } from "lucide-react";
 import Navbar from "@/components/Navbar";
 
 const Dashboard = () => {
@@ -198,24 +198,6 @@ const Dashboard = () => {
             </Table>
           </CardContent>
         </Card>
-
-        {/* WhatsApp CTA to talk to the same loan assistant over WhatsApp (Twilio number) */}
-        <div className="mt-8 flex justify-end">
-          <a
-            href="https://wa.me/14787778556?text=Hi%20Tata%20Capital"
-            target="_blank"
-            rel="noreferrer"
-          >
-            <Button
-              variant="outline"
-              size="lg"
-              className="flex items-center gap-2 border-[#25D366] text-[#25D366] hover:bg-[#25D366]/10"
-            >
-              <MessageCircle className="h-5 w-5" />
-              Chat on WhatsApp
-            </Button>
-          </a>
-        </div>
       </div>
     </div>
   );
