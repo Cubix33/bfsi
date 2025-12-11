@@ -3,29 +3,26 @@ import { Link, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Building2 } from "lucide-react";
 
+import { auth } from "@/firebase/firebaseConfig";
+import { onAuthStateChanged, signOut } from "firebase/auth";
+
 const Navbar = () => {
   const location = useLocation();
   const isActive = (path: string) => location.pathname === path;
+
   const [isSignedIn, setIsSignedIn] = useState(false);
 
-  // Load sign-in state from localStorage when component mounts
   useEffect(() => {
-    const storedState = localStorage.getItem("isSignedIn");
-    if (storedState === "true") {
-      setIsSignedIn(true);
-    }
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setIsSignedIn(!!user); // true if logged in, false if not
+    });
+
+    return () => unsubscribe();
   }, []);
 
-  // Handle sign-in click
-  const handleSignIn = () => {
-    setIsSignedIn(true);
-    localStorage.setItem("isSignedIn", "true"); // persist
-  };
-
-  // Optional: logout/reset method (for future)
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    await signOut(auth);
     setIsSignedIn(false);
-    localStorage.removeItem("isSignedIn");
   };
 
   return (
@@ -49,23 +46,23 @@ const Navbar = () => {
           >
             Home
           </Link>
-          <Link
-            to="/#about"
+          <a
+            href="/#about"
             className="text-sm font-medium text-muted-foreground transition-colors hover:text-primary"
           >
             About
-          </Link>
-          <Link
-            to="/#how-it-works"
+          </a>
+          <a
+            href="/#how-it-works"
             className="text-sm font-medium text-muted-foreground transition-colors hover:text-primary"
           >
             How It Works
-          </Link>
+          </a>
         </div>
 
-               <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3">
           {!isSignedIn && (
-            <Link to="/login" onClick={handleSignIn}>
+            <Link to="/login">
               <Button variant="ghost" size="sm">
                 Sign In
               </Button>
@@ -78,7 +75,6 @@ const Navbar = () => {
             </Button>
           </Link>
 
-          {/* NEW: Visit Profile (Dashboard) when logged in */}
           {isSignedIn && (
             <Link to="/dashboard">
               <Button
@@ -92,15 +88,14 @@ const Navbar = () => {
           )}
 
           {isSignedIn && (
-            <Link to="/" onClick={handleLogout}>
-              <Button
-                variant="outline"
-                size="sm"
-                className="text-xs text-muted-foreground hover:text-primary"
-              >
-                Log Out
-              </Button>
-            </Link>
+            <Button
+              onClick={handleLogout}
+              variant="outline"
+              size="sm"
+              className="text-xs text-muted-foreground hover:text-primary"
+            >
+              Log Out
+            </Button>
           )}
         </div>
       </div>

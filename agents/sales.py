@@ -4,6 +4,7 @@ import re
 import os
 from dotenv import load_dotenv
 from groq import Groq
+from deep_translator import GoogleTranslator
 
 class SalesAgent:
     """
@@ -14,10 +15,29 @@ class SalesAgent:
     
     def __init__(self, api_key: str):
         self.client = Groq(api_key=api_key)
-        # Using Llama 3 70B for better instruction following regarding formatting
-        self.model = "openai/gpt-oss-20b" 
+        self.model = "openai/gpt-oss-120b"
         self.conversation_context = []
-        
+        self.user_language = "en"
+    
+    # Multilingual greetings
+        self.greetings = {
+        "en": "Hello 👋 I'm Arjun, your personal loan advisor at Tata Capital.\n\nTo get started, could you please share your registered phone number?",
+        "hi": "नमस्ते 👋 मैं अर्जुन हूं, टाटा कैपिटल में आपका व्यक्तिगत ऋण सलाहकार।\n\nशुरू करने के लिए, क्या आप कृपया अपना पंजीकृत फोन नंबर साझा कर सकते हैं?",
+        "ta": "வணக்கம் 👋 நான் அர்ஜுன், டாடா கேபிடலில் உங்கள் தனிப்பட்ட கடன் ஆலோசகர்.\n\nதொடங்க, உங்கள் பதிவு செய்யப்பட்ட தொலைபேசி எண்ணைப் பகிரவும்?",
+        "te": "నమస్కారం 👋 నేను అర్జున్, టాటా క్యాపిటల్‌లో మీ వ్యక్తిగత లోన్ సలహాదారుడు.\n\nప్రారంభించడానికి, దయచేసి మీ నమోదు చేసుకున్న ఫోన్ నంబర్‌ను షేర్ చేయగలరా?",
+        "bn": "নমস্কার 👋 আমি অর্জুন, টাটা ক্যাপিটালে আপনার ব্যক্তিগত ঋণ পরামর্শদাতা।\n\nশুরু করতে, আপনি কি আপনার নিবন্ধিত ফোন নম্বর শেয়ার করতে পারেন?",
+        "mr": "नमस्कार 👋 मी अर्जुन, टाटा कॅपिटलमधील तुमचा वैयक्तिक कर्ज सल्लागार.\n\nसुरुवात करण्यासाठी, कृपया तुमचा नोंदणीकृत फोन नंबर शेअर करू शकता का?",
+        "gu": "નમસ્તે 👋 હું અર્જુન છું, ટાટા કેપિટલમાં તમારો વ્યક્તિગત લોન સલાહકાર.\n\nશરૂ કરવા માટે, શું તમે તમારો નોંધાયેલ ફોન નંબર શેર કરી શકો છો?"
+    }
+
+    def set_language(self, language: str):
+        """Set the conversation language"""
+        self.user_language = language
+
+    def get_initial_greeting(self) -> str:
+        """Get greeting in user's language"""
+        return self.greetings.get(self.user_language, self.greetings["en"])
+
     def negotiate_loan(
         self, 
         user_message: str, 
@@ -29,8 +49,15 @@ class SalesAgent:
         """
         Negotiate loan terms with customer using LLM
         """
-        
-        all_history = conversation_history + [{"role": "user", "content": user_message}]
+        if self.user_language != "en":
+            try:
+                translated_input = GoogleTranslator(source=self.user_language, target='en').translate(user_message)
+            except:
+                translated_input = user_message
+        else:
+            translated_input = user_message
+    
+        all_history = conversation_history + [{"role": "user", "content": translated_input}]
         extracted_details = self._extract_loan_details(all_history)
         
         final_details = current_loan_details.copy()
@@ -72,6 +99,13 @@ class SalesAgent:
             # CRITICAL: Force remove asterisks and emojis if LLM leaks them
             assistant_message = assistant_message.replace('*', '').replace('✨', '').replace('🎉', '')
             
+            if self.user_language != "en":
+                try:
+                    translated_response = GoogleTranslator(source='en', target=self.user_language).translate(assistant_message)
+                except:
+                    translated_response = assistant_message
+            else:
+                translated_response = assistant_message
             extraction_match = re.search(r'\[EXTRACTION:amount=(\d+),tenure=(\d+),purpose=([^\]]+)\]', assistant_message)
             if extraction_match:
                 final_loan = {
@@ -80,7 +114,7 @@ class SalesAgent:
                     "purpose": extraction_match.group(3).strip()
                 }
                 final_loan = self._finalize_loan_details(final_loan, customer_data)
-                clean_message = self._clean_message(assistant_message)
+                clean_message = self._clean_message(translated_response)
                 
                 return {
                     "message": clean_message,
@@ -89,7 +123,7 @@ class SalesAgent:
                 }
 
             return {
-                "message": self._clean_message(assistant_message),
+                "message": self._clean_message(translated_response),
                 "ready_for_next_stage": False, 
                 "loan_details": final_details
             }

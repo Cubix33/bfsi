@@ -79,6 +79,7 @@ def chat():
     data = request.get_json(force=True)
     session_id = data.get("session_id")
     message = data.get("message", "").strip()
+    language = data.get("language", "en")
 
     if not session_id:
         return jsonify({"error": "session_id required"}), 400
@@ -111,11 +112,27 @@ def chat():
         })
     # ---------- END NEW BLOCK ----------
 
+        # Handle initial greeting request
+    if message == "__INIT__":
+        agent = get_or_create_session(session_id)
+        agent.user_language = language  # ADD THIS
+        agent.sales_agent.set_language(language)
+        greeting = agent.sales_agent.get_initial_greeting()
+        agent.conversation_history = [{"role": "assistant", "content": greeting}]
+        return jsonify({
+        "reply": greeting,
+        "stage": "initial",
+        "final_decision": None,
+    })
+
     if not message:
         return jsonify({"error": "message required"}), 400
 
     agent = get_or_create_session(session_id)
+    agent.user_language = language  # ADD THIS
+    agent.sales_agent.set_language(language)
     reply = agent.process_message(message)
+
 
     return jsonify({
         "reply": reply,

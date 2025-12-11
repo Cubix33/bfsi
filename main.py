@@ -17,6 +17,12 @@ import re
 from user_store import add_application
 from uuid import uuid4
 from datetime import datetime
+from deep_translator import GoogleTranslator
+# You may need to install langdetect: pip install langdetect
+try:
+    from langdetect import detect
+except ImportError:
+    detect = None
 
 # Load environment variables
 load_dotenv()
@@ -146,6 +152,7 @@ class MasterAgent:
     def __init__(self, api_key: str):
         self.client = Groq(api_key=api_key)
         self.conversation_history: List[Dict[str, str]] = []
+        self.user_language = "en"
         self.state = {
             "stage": "initial",
             "customer_data": None,
@@ -175,6 +182,41 @@ class MasterAgent:
         self.upload_agent = UploadAgent()
         self.secured_loan_agent = SecuredLoanAgent()
         self.risk_agent = RiskAgent()
+
+    def _translate_like_user(self, text: str, example_user_message: str) -> str:
+        """
+        Use Groq to translate `text` into the same language that
+        `example_user_message` is written in.
+        """
+        if not text.strip():
+            return text
+
+        try:
+            response = self.client.chat.completions.create(
+                model="openai/gpt-oss-120b",  # or whatever Groq model you're using
+                messages=[
+                    {
+                        "role": "system",
+                        "content": (
+                            "You are a translator.\n"
+                            "Detect the language of TEXT_B and translate TEXT_A "
+                            "into exactly that language.\n"
+                            "Return ONLY the translated TEXT_A, nothing else."
+                        ),
+                    },
+                    {
+                        "role": "user",
+                        "content": f"TEXT_A:\n{text}\n\nTEXT_B:\n{example_user_message}",
+                    },
+                ],
+                temperature=0.0,
+                max_tokens=800,
+            )
+            return response.choices[0].message.content.strip()
+        except Exception as e:
+            print(f"[WARN] Translation failed: {e}")
+            # Fallback to English if translation fails
+            return text
         
     def _is_affirmative(self, text: str) -> bool:
         return any(word in text.lower() for word in ["yes", "yep", "ya", "y", "sure", "ok", "okay", "proceed", "accept", "correct"])
@@ -206,32 +248,89 @@ May I have your phone number to get started?"""
         return welcome_msg
     
     def process_message(self, user_message: str) -> str:
-        self.conversation_history.append({"role": "user", "content": user_message})
-        
-        if self.state["stage"] == "initial":
-            return self._handle_initial_stage(user_message)
-        elif self.state["stage"] == "new_customer_onboarding":
-            return self._handle_new_customer_onboarding(user_message)
-        elif self.state["stage"] == "needs_assessment":
-            return self._handle_needs_assessment(user_message)
-        elif self.state["stage"] == "verification":
-            return self._handle_verification(user_message)
-        elif self.state["stage"] == "credit_check":
-            return self._handle_credit_check(user_message)
-        elif self.state["stage"] == "underwriting":
-            return self._handle_underwriting(user_message)
-        elif self.state["stage"] == "document_upload":
-            return self._handle_document_upload(user_message)
-        elif self.state["stage"] == "secured_loan":
-            return self._handle_secured_loan_flow(user_message)
-        elif self.state["stage"] == "approval":
-            return self._handle_approval(user_message)
-        elif self.state["stage"] == "rejection":
-            return self._handle_rejection(user_message)
-        elif self.state["stage"] == "completed":
-            return self._handle_post_completion_qa(user_message)
+        """
+        1. If needed, translate user's message -> English (for rules & heuristics).
+        2. Run state machine.
+        3. Translate our English reply -> user's selected language.
+        """
+
+        # Language Detection for the first turn (if detect is available)
+        if self.state["stage"] == "initial" and detect:
+            try:
+                detected_lang = detect(user_message)
+                if detected_lang != 'en':
+                    self.user_language = detected_lang
+            except:
+                pass
+
+        # 1) Normalize incoming to English for internal logic
+        if self.user_language != "en":
+            try:
+                # Use source='auto' if we aren't 100% sure, or self.user_language if we are.
+                # Fallback to 'auto' ensures it works even if detection failed above.
+                normalized_message = GoogleTranslator(
+                    source='auto',
+                    target="en"
+                ).translate(user_message)
+            except Exception:
+                normalized_message = user_message
         else:
-            return "I am sorry, something went wrong. Let me restart our conversation."
+            normalized_message = user_message
+
+        # Store ENGLISH version in history so LLM context is clean
+        self.conversation_history.append({
+            "role": "user",
+            "content": normalized_message,
+        })
+
+        # Personality detection on normalized English text
+        self.state["user_personality"] = self._detect_personality(
+            normalized_message.lower()
+        )
+
+        # 🔹 SPECIAL CASE: Needs Assessment uses SalesAgent, which already
+        # does its own translation in/out (or we handle it via _translate_like_user in _handle_needs_assessment).
+        if self.state["stage"] == "needs_assessment":
+            return self._handle_needs_assessment(user_message)
+
+        # 2) All other stages use our ENGLISH normalized text
+        if self.state["stage"] == "initial":
+            response = self._handle_initial_stage(normalized_message)
+        elif self.state["stage"] == "new_customer_onboarding":
+            response = self._handle_new_customer_onboarding(normalized_message)
+        elif self.state["stage"] == "verification":
+            response = self._handle_verification(normalized_message)
+        elif self.state["stage"] == "credit_check":
+            response = self._handle_credit_check(normalized_message)
+        elif self.state["stage"] == "underwriting":
+            response = self._handle_underwriting(normalized_message)
+        elif self.state["stage"] == "document_upload":
+            response = self._handle_document_upload(normalized_message)
+        elif self.state["stage"] == "secured_loan":
+            response = self._handle_secured_loan_flow(normalized_message)
+        elif self.state["stage"] == "approval":
+            response = self._handle_approval(normalized_message)
+        elif self.state["stage"] == "rejection":
+            response = self._handle_rejection(normalized_message)
+        elif self.state["stage"] == "completed":
+            response = "Our conversation has ended. If you'd like to start over, please type 'restart'."
+        else:
+            response = "I'm sorry, something went wrong. Let me restart our conversation."
+
+        # 3) Translate response back to user's language (except English)
+        if self.user_language != "en":
+            try:
+                translated_response = GoogleTranslator(
+                    source="en",
+                    target=self.user_language
+                ).translate(response)
+                return translated_response
+            except Exception:
+                # if translation fails, at least return English
+                return response
+
+        # English case
+        return response
 
     def _handle_initial_stage(self, user_message: str) -> str:
         phone = ''.join(filter(str.isdigit, user_message))
@@ -373,9 +472,29 @@ Please provide details like '3BHK worth 30 lakhs' or 'Honda City Car'.
         
         if sales_response.get("ready_for_next_stage"):
             self.state["stage"] = "verification"
-            msg = self._get_verification_summary()
-            self.conversation_history.append({"role": "assistant", "content": msg})
-            return msg
+            
+            verification_msg = f"""Perfect! Let me summarize:
+- Loan Amount: ₹{self.state['loan_request']['amount']:,}
+- Purpose: {self.state['loan_request']['purpose'].replace('_', ' ').title()}
+- Tenure: {self.state['loan_request']['tenure']} months ({self.state['loan_request']['tenure']//12} years)
+- Interest Rate: {self.state['loan_request']['interest_rate']}% p.a.
+- Monthly EMI: ₹{self.state['loan_request']['emi']:,}
+
+Now, for security purposes, I need to verify your details. Let me confirm:
+- Name: {self.state['customer_data']['name']}
+- Phone: {self.state['customer_data']['phone']}
+- Address: {self.state['customer_data']['address']}
+
+Is this information correct? (Yes/No)"""
+            
+            # Use the LLM helper to translate this summary to the user's current language style
+            localized_msg = self._translate_like_user(verification_msg, user_message)
+
+            self.conversation_history.append({
+                "role": "assistant",
+                "content": localized_msg,
+            })
+            return localized_msg
         else:
             response = sales_response["message"]
             self.conversation_history.append({"role": "assistant", "content": response})

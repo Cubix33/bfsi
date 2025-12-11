@@ -8,6 +8,9 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Building2 } from "lucide-react";
 import { toast } from "sonner";
 
+import { createUserWithEmailAndPassword, updateProfile, GoogleAuthProvider, signInWithPopup } from "firebase/auth";
+import { auth } from "@/firebase/firebaseConfig"; 
+
 const Register = () => {
   const navigate = useNavigate();
   const [formData, setFormData] = useState({
@@ -19,9 +22,22 @@ const Register = () => {
     agreeToTerms: false,
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  // 🔥 GOOGLE SIGN-UP
+  const handleGoogleSignup = async () => {
+    try {
+      const provider = new GoogleAuthProvider();
+      const result = await signInWithPopup(auth, provider);
+
+      toast.success("Signed up with Google!");
+      navigate("/dashboard");
+    } catch (err: any) {
+      toast.error(err.message || "Google signup failed");
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (formData.password !== formData.confirmPassword) {
       toast.error("Passwords do not match");
       return;
@@ -32,8 +48,23 @@ const Register = () => {
       return;
     }
 
-    toast.success("Account created successfully!");
-    setTimeout(() => navigate("/login"), 500);
+    try {
+      // Email/password signup
+      const userCredential = await createUserWithEmailAndPassword(
+        auth,
+        formData.email,
+        formData.password
+      );
+
+      await updateProfile(userCredential.user, {
+        displayName: formData.fullName,
+      });
+
+      toast.success("Account created successfully!");
+      setTimeout(() => navigate("/login"), 700);
+    } catch (error: any) {
+      toast.error(error.message || "Registration failed");
+    }
   };
 
   return (
@@ -53,8 +84,11 @@ const Register = () => {
               Sign up to get started with your loan application
             </CardDescription>
           </CardHeader>
+
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
+              
+              {/* Full Name */}
               <div className="space-y-2">
                 <Label htmlFor="fullName">Full Name</Label>
                 <Input
@@ -67,6 +101,7 @@ const Register = () => {
                 />
               </div>
 
+              {/* Email */}
               <div className="space-y-2">
                 <Label htmlFor="email">Email</Label>
                 <Input
@@ -79,6 +114,7 @@ const Register = () => {
                 />
               </div>
 
+              {/* Phone */}
               <div className="space-y-2">
                 <Label htmlFor="phone">Phone Number</Label>
                 <Input
@@ -91,6 +127,7 @@ const Register = () => {
                 />
               </div>
 
+              {/* Password */}
               <div className="space-y-2">
                 <Label htmlFor="password">Password</Label>
                 <Input
@@ -103,6 +140,7 @@ const Register = () => {
                 />
               </div>
 
+              {/* Confirm Password */}
               <div className="space-y-2">
                 <Label htmlFor="confirmPassword">Confirm Password</Label>
                 <Input
@@ -115,6 +153,7 @@ const Register = () => {
                 />
               </div>
 
+              {/* Terms */}
               <div className="flex items-center space-x-2">
                 <Checkbox
                   id="terms"
@@ -125,7 +164,7 @@ const Register = () => {
                 />
                 <label
                   htmlFor="terms"
-                  className="text-sm text-muted-foreground leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                  className="text-sm text-muted-foreground"
                 >
                   I agree to the{" "}
                   <Link to="/terms" className="text-primary hover:underline">
@@ -138,6 +177,15 @@ const Register = () => {
                 Register
               </Button>
             </form>
+
+            {/* ⭐ GOOGLE SIGNUP BUTTON */}
+            <Button
+              onClick={handleGoogleSignup}
+              className="w-full mt-4"
+              variant="outline"
+            >
+              Sign Up with Google
+            </Button>
 
             <div className="mt-6 text-center text-sm">
               <span className="text-muted-foreground">Already have an account? </span>
