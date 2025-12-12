@@ -6,6 +6,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Send, Upload, Bot, User} from "lucide-react";
 import Navbar from "@/components/Navbar";
+import VoiceChat from "@/components/VoiceChat";
 import { Languages } from "lucide-react";
 import {
   DropdownMenu,
@@ -412,6 +413,17 @@ const Chat = () => {
                   >
                     <Send className="h-5 w-5" />
                   </Button>
+                </div>
+
+                {/* Voice Chat Integration - Free Browser APIs */}
+                <div className="mt-4 pt-4 border-t">
+                  <VoiceChat 
+                    sessionId={sessionId} 
+                    language={language}
+                    onAddMessage={(role, content) => {
+                      setMessages(prev => [...prev, { role, content, timestamp: new Date() }]);
+                    }}
+                  />
                 </div>
               </div>
             </Card>

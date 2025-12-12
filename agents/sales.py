@@ -102,7 +102,9 @@ class SalesAgent:
             if self.user_language != "en":
                 try:
                     translated_response = GoogleTranslator(source='en', target=self.user_language).translate(assistant_message)
-                except:
+                    print(f"Translated to {self.user_language}: {translated_response[:100]}...")
+                except Exception as e:
+                    print(f"Translation failed for {self.user_language}: {e}")
                     translated_response = assistant_message
             else:
                 translated_response = assistant_message
