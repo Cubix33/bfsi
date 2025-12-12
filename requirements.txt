@@ -8,4 +8,5 @@ python-dotenv
 reportlab
 langchain-groq
 groq
+deep-translator
 
