@@ -52,36 +52,88 @@ TWILIO_WHATSAPP_NUMBER=whatsapp:+14155238886
 GROQ_API_KEY=your_groq_api_key
 ```
 
-## Running the WhatsApp Bot
-Step 1: Start the Flask WhatsApp Server
-``` python whatsapp_bot.py
-```
+## 1. Start the WhatsApp Flask Server
 
-Server runs on:
+Open a terminal in the backend folder and run:
+
+python whatsapp_bot.py
+
+The server will start on:
+
 http://localhost:5000
 
-Step 2: Expose Server Using Ngrok
+Keep this terminal running.
+
+---
+
+## 2. Expose the Server Using Ngrok
+
+Open a new terminal and run:
+
 ngrok http 5000
-Copy the generated HTTPS ngrok URL.
 
-Step 3: Configure Twilio Webhook
-Twilio Console → Messaging → WhatsApp Sandbox
-Set WHEN A MESSAGE COMES IN to:
+Ngrok will generate a public HTTPS URL like:
+
+https://xxxx.ngrok-free.dev
+
+Copy this URL.
+
+---
+
+## 3. Configure Twilio WhatsApp Webhook
+
+1. Open **Twilio Console**
+2. Go to:
+   - Messaging  
+   - Try it out  
+   - WhatsApp Sandbox
+3. Find **WHEN A MESSAGE COMES IN**
+4. Paste the webhook URL:
+
 https://<ngrok-url>/webhook
-Save changes.
 
-Step 4: Join WhatsApp Sandbox
-Send this message to the Twilio sandbox number:
+Example:
+
+https://xxxx.ngrok-free.dev/webhook
+
+5. Save the changes
+
+---
+
+## 4. Join the WhatsApp Sandbox
+
+Send this message to the Twilio sandbox WhatsApp number:
+
 join <sandbox-code>
-eg : join cave-pool
+
+Example:
+
+join cave-pool
+
 You will receive a confirmation message.
 
-Using the WhatsApp Bot (User Flow)
-User sends Hi
-Bot asks for phone number
-Loan amount, purpose, income collected
-KYC documents requested and validated
-Credit score fetched and risk model executed
+---
+
+## 5. Using the WhatsApp Bot (User Flow)
+
+- User sends **Hi** on WhatsApp  
+- Bot creates a new session  
+- Bot asks for phone number and validates it  
+- Bot collects:
+  - Loan amount  
+  - Loan purpose  
+  - Monthly income  
+- Bot requests KYC documents  
+- Documents are verified  
+- Credit score is fetched  
+- Risk model (XGBoost) is executed  
+- Loan is approved or rejected  
+
+If approved:
+- Sanction letter PDF is generated  
+- PDF is sent via WhatsApp or provided as a website download link  
+
+---
 Loan approved or rejected
 Sanction letter PDF generated
 PDF delivered via WhatsApp or website
