@@ -122,7 +122,7 @@ Save the changes.
 Send this message to the Twilio sandbox WhatsApp number:
 
 
-- join <sandbox-code>
+- join sandbox-code
 
 
 Example:
