@@ -109,9 +109,9 @@ Find **WHEN A MESSAGE COMES IN**.
 
 Example:
 
-```text
-https://xxxx.ngrok-free.dev/webhook
-```
+
+- https://xxxx.ngrok-free.dev/webhook
+
 
 Save the changes.
 
@@ -121,15 +121,15 @@ Save the changes.
 
 Send this message to the Twilio sandbox WhatsApp number:
 
-```text
-join <sandbox-code>
-```
+
+- join <sandbox-code>
+
 
 Example:
 
-```text
-join cave-pool
-```
+
+- join cave-pool
+
 
 You will receive a confirmation message.
 
