@@ -54,7 +54,8 @@ GROQ_API_KEY=your_groq_api_key
 
 ## Running the WhatsApp Bot
 Step 1: Start the Flask WhatsApp Server
-python whatsapp_bot.py
+``` python whatsapp_bot.py
+```
 
 Server runs on:
 http://localhost:5000
