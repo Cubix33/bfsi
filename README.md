@@ -79,11 +79,11 @@ ngrok http 5000
 
 Ngrok will generate a public HTTPS URL like:
 
-```text
-https://xxxx.ngrok-free.dev
-```
 
-Copy this URL.
+https://xxxx.ngrok-free.dev
+
+
+Copy that URL.
 
 ---
 
@@ -101,11 +101,11 @@ WhatsApp Sandbox
 
 Find **WHEN A MESSAGE COMES IN**.
 
-Paste the webhook URL:
+- Paste the webhook URL:
 
-```text
-https://<ngrok-url>/webhook
-```
+
+- https://<ngrok-url>/webhook
+
 
 Example:
 
@@ -137,24 +137,24 @@ You will receive a confirmation message.
 
 ### 5. Using the WhatsApp Bot (User Flow)
 
-```text
-User sends "Hi" on WhatsApp
-Bot creates a new session
-Bot asks for phone number and validates it
-Bot collects loan amount
-Bot collects loan purpose
-Bot collects monthly income
-Bot requests KYC documents
-Documents are verified
-Credit score is fetched
-Risk model (XGBoost) is executed
-Loan is approved or rejected
-```
 
-If approved:
+- User sends "Hi" on WhatsApp
+- Bot creates a new session
+- Bot asks for phone number and validates it
+- Bot collects loan amount
+- Bot collects loan purpose
+- Bot collects monthly income
+- Bot requests KYC documents
+- Documents are verified
+- Credit score is fetched
+- Risk model (XGBoost) is executed
+- Loan is approved or rejected
+  
 
-```text
-Sanction letter PDF generated
-PDF sent via WhatsApp
-Website download link provided
-```
+### If approved:
+
+
+- Sanction letter PDF generated
+- PDF sent via WhatsApp
+- Website download link provided
+
