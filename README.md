@@ -69,7 +69,7 @@ Keep this terminal running.
 
 ---
 
-### 2. Expose the Server Using Ngrok
+### 2. Expose the Server Using Ngrok (download Ngrok first if not done, and add it to PATH)
 
 Open a new terminal and run:
 
