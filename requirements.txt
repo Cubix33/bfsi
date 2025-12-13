@@ -9,4 +9,6 @@ reportlab
 langchain-groq
 groq
 deep-translator
-
+twilio 
+ngrok
+shap
