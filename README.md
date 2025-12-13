@@ -51,89 +51,12 @@ TWILIO_AUTH_TOKEN=your_auth_token
 TWILIO_WHATSAPP_NUMBER=whatsapp:+14155238886
 GROQ_API_KEY=your_groq_api_key
 ```
-
-## 1. Start the WhatsApp Flask Server
+###1. Start the WhatsApp Flask Server
 
 Open a terminal in the backend folder and run:
-
+```bash
 python whatsapp_bot.py
-
+```
 The server will start on:
-
 http://localhost:5000
-
 Keep this terminal running.
-
----
-
-## 2. Expose the Server Using Ngrok
-
-Open a new terminal and run:
-
-ngrok http 5000
-
-Ngrok will generate a public HTTPS URL like:
-
-https://xxxx.ngrok-free.dev
-
-Copy this URL.
-
----
-
-## 3. Configure Twilio WhatsApp Webhook
-
-1. Open **Twilio Console**
-2. Go to:
-   - Messaging  
-   - Try it out  
-   - WhatsApp Sandbox
-3. Find **WHEN A MESSAGE COMES IN**
-4. Paste the webhook URL:
-
-https://<ngrok-url>/webhook
-
-Example:
-
-https://xxxx.ngrok-free.dev/webhook
-
-5. Save the changes
-
----
-
-## 4. Join the WhatsApp Sandbox
-
-Send this message to the Twilio sandbox WhatsApp number:
-
-join <sandbox-code>
-
-Example:
-
-join cave-pool
-
-You will receive a confirmation message.
-
----
-
-## 5. Using the WhatsApp Bot (User Flow)
-
-- User sends **Hi** on WhatsApp  
-- Bot creates a new session  
-- Bot asks for phone number and validates it  
-- Bot collects:
-  - Loan amount  
-  - Loan purpose  
-  - Monthly income  
-- Bot requests KYC documents  
-- Documents are verified  
-- Credit score is fetched  
-- Risk model (XGBoost) is executed  
-- Loan is approved or rejected  
-
-If approved:
-- Sanction letter PDF is generated  
-- PDF is sent via WhatsApp or provided as a website download link  
-
----
-Loan approved or rejected
-Sanction letter PDF generated
-PDF delivered via WhatsApp or website
