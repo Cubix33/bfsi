@@ -18,6 +18,7 @@ from user_store import add_application
 from uuid import uuid4
 from datetime import datetime
 from deep_translator import GoogleTranslator
+
 # You may need to install langdetect: pip install langdetect
 try:
     from langdetect import detect
@@ -193,7 +194,7 @@ class MasterAgent:
 
         try:
             response = self.client.chat.completions.create(
-                model="openai/gpt-oss-120b",  # or whatever Groq model you're using
+                model="openai/gpt-oss-120b",
                 messages=[
                     {
                         "role": "system",
@@ -266,8 +267,6 @@ May I have your phone number to get started?"""
         # 1) Normalize incoming to English for internal logic
         if self.user_language != "en":
             try:
-                # Use source='auto' if we aren't 100% sure, or self.user_language if we are.
-                # Fallback to 'auto' ensures it works even if detection failed above.
                 normalized_message = GoogleTranslator(
                     source='auto',
                     target="en"
@@ -288,7 +287,7 @@ May I have your phone number to get started?"""
             normalized_message.lower()
         )
 
-        # 🔹 SPECIAL CASE: Needs Assessment uses SalesAgent, which already
+        # SPECIAL CASE: Needs Assessment uses SalesAgent, which already
         # does its own translation in/out (or we handle it via _translate_like_user in _handle_needs_assessment).
         if self.state["stage"] == "needs_assessment":
             return self._handle_needs_assessment(user_message)
@@ -326,7 +325,6 @@ May I have your phone number to get started?"""
                 ).translate(response)
                 return translated_response
             except Exception:
-                # if translation fails, at least return English
                 return response
 
         # English case
@@ -433,8 +431,13 @@ Please provide details like '3BHK worth 30 lakhs' or 'Honda City Car'.
                 "age": 30
             })
             
+            # --- SHAP INTEGRATION HERE ---
+            # Call the Risk Agent to get the score AND the explanation
             risk_result = self.risk_agent.get_safety_score(self.state["temp_customer_data"])
             self.state["temp_customer_data"]["internal_safety_score"] = risk_result["safety_score"]
+            risk_explanation = risk_result.get("explanation", "Assessment complete.")
+            # -----------------------------
+
             self.state["customer_data"] = self.state["temp_customer_data"]
             self.state["awaiting_manual_data_entry"] = False
             self.state["stage"] = "needs_assessment"
@@ -445,6 +448,8 @@ Please provide details like '3BHK worth 30 lakhs' or 'Honda City Car'.
             summary = f"Perfect! Thank you for providing your details, {self.state['customer_data']['name']}.\n\n"
             summary += f"Profile Summary:\n"
             summary += f"- Monthly Income: Rs. {self.state['temp_customer_data']['monthly_income']:,}\n"
+            # Displaying the Intelligent Recommendation
+            summary += f"- AI Risk Assessment: {risk_explanation}\n"
             
             if collateral_info:
                 summary += f"- Collateral: {collateral_info['description']} (Value: Rs. {collateral_info['value']:,})\n"
@@ -570,10 +575,21 @@ Is this correct? (Yes/No)"""
         if self.state.get("awaiting_profile_permission"):
             if self._is_affirmative(user_lower):
                 customer_data = self.state["temp_customer_data"]
+                
+                # --- SHAP INTEGRATION FOR EXISTING CUSTOMERS ---
+                risk_result = self.risk_agent.get_safety_score(customer_data)
+                customer_data["internal_safety_score"] = risk_result["safety_score"]
+                risk_explanation = risk_result.get("explanation", "")
+                # -----------------------------------------------
+
                 self.state["customer_data"] = customer_data
                 self.state["stage"] = "needs_assessment"
                 self.state["awaiting_profile_permission"] = False
-                response = f"Great. I found your profile, {customer_data['name']}. You have a pre-approved limit of Rs. {customer_data['pre_approved_limit']:,}.\n\nCould you tell me how much loan amount you are looking for and for what purpose?"
+                
+                response = f"Great. I found your profile, {customer_data['name']}. \n"
+                response += f"Risk Insight: {risk_explanation}\n\n"
+                response += f"You have a pre-approved limit of Rs. {customer_data['pre_approved_limit']:,}.\n\n"
+                response += "Could you tell me how much loan amount you are looking for and for what purpose?"
                 self.conversation_history.append({"role": "assistant", "content": response})
                 return response
             elif self._is_negative(user_lower):
@@ -772,7 +788,7 @@ Keep answers short and human-like."""
         
         try:
             response = self.client.chat.completions.create(
-                model="openai/gpt-oss-20b", 
+                model="openai/gpt-oss-120b", 
                 messages=messages,
                 max_tokens=200
             )
