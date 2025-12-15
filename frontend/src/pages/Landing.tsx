@@ -2,10 +2,27 @@ import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { MessageCircle, Zap, FileText, CheckCircle, ArrowRight } from "lucide-react";
+import { useEffect, useState } from "react";
+import { auth } from "@/firebase/firebaseConfig";
+import { onAuthStateChanged, signOut } from "firebase/auth";
 import Navbar from "@/components/Navbar";
 import heroImage from "@/assets/hero-banking.jpg";
 
 const Landing = () => {
+  const [isSignedIn, setIsSignedIn] = useState(false);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setIsSignedIn(!!user);
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  const handleLogout = async () => {
+    await signOut(auth);
+  };
+
   return (
     <div className="min-h-screen bg-gradient-subtle">
       <Navbar />
@@ -31,11 +48,27 @@ const Landing = () => {
                     Start Application <ArrowRight className="ml-2 h-5 w-5" />
                   </Button>
                 </Link>
-                <Link to="/login">
-                  <Button size="lg" variant="outline" className="border-white text-primary hover:text-white hover:bg-white/10">
-                    Sign In
+                {!isSignedIn ? (
+                  <Link to="/login">
+                    <Button
+                      size="lg"
+                      variant="outline"
+                      className="border-white text-primary hover:text-white hover:bg-white/10"
+                    >
+                      Sign In
+                    </Button>
+                  </Link>
+                ) : (
+                  <Button
+                    size="lg"
+                    variant="outline"
+                    onClick={handleLogout}
+                    className="border-white text-primary hover:text-white hover:bg-white/10"
+                  >
+                    Log Out
                   </Button>
-                </Link>
+                )}
+
               </div>
             </div>
             <div className="animate-scale-in hidden md:block">
@@ -135,9 +168,8 @@ const Landing = () => {
             ].map((item, idx) => (
               <div
                 key={idx}
-                className={`relative flex items-center gap-8 mb-12 animate-fade-in-up ${
-                  idx % 2 === 0 ? "md:flex-row" : "md:flex-row-reverse"
-                }`}
+                className={`relative flex items-center gap-8 mb-12 animate-fade-in-up ${idx % 2 === 0 ? "md:flex-row" : "md:flex-row-reverse"
+                  }`}
                 style={{ animationDelay: `${idx * 150}ms` }}
               >
                 <div className="flex-1">

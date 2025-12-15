@@ -5,19 +5,34 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Plus, FileText, TrendingUp, Clock, MessageCircle } from "lucide-react";
 import Navbar from "@/components/Navbar";
+import { auth } from "@/firebase/firebaseConfig";
+import { onAuthStateChanged } from "firebase/auth";
+import { useEffect, useState } from "react";
+
 
 const Dashboard = () => {
+  const [userName, setUserName] = useState<string>("");
+
+useEffect(() => {
+  const unsubscribe = onAuthStateChanged(auth, (user) => {
+    if (user) {
+
+      setUserName(user.displayName || "User");
+    }
+  });
+
+  return () => unsubscribe();
+}, []);
+
   const activeApplications = [
     {
       id: "TCSL2025001234",
-      customerName: "Riya Sharma",
       amount: 500000,
       status: "Approved",
       date: "2025-01-15",
     },
     {
       id: "TCSL2025001120",
-      customerName: "Riya Sharma",
       amount: 300000,
       status: "Under Review",
       date: "2025-01-10",
@@ -27,7 +42,6 @@ const Dashboard = () => {
   const pastApplications = [
     {
       id: "TCSL2024005678",
-      customerName: "Riya Sharma",
       amount: 200000,
       status: "Disbursed",
       date: "2024-12-05",
@@ -54,7 +68,8 @@ const Dashboard = () => {
       <div className="container mx-auto px-4 py-8">
         <div className="flex justify-between items-center mb-8 animate-fade-in">
           <div>
-            <h1 className="text-4xl font-bold text-foreground mb-2">Welcome Back, Riya!</h1>
+            <h1 className="text-4xl font-bold text-foreground mb-2">Welcome Back, {userName}!
+</h1>
             <p className="text-lg text-muted-foreground">
               Manage your loan applications and track your progress
             </p>
@@ -130,7 +145,7 @@ const Dashboard = () => {
                 {activeApplications.map((app) => (
                   <TableRow key={app.id}>
                     <TableCell className="font-medium">{app.id}</TableCell>
-                    <TableCell>{app.customerName}</TableCell>
+                    <TableCell>{userName}</TableCell>
                     <TableCell className="font-semibold">
                       ₹{app.amount.toLocaleString("en-IN")}
                     </TableCell>
@@ -182,7 +197,7 @@ const Dashboard = () => {
                 {pastApplications.map((app) => (
                   <TableRow key={app.id}>
                     <TableCell className="font-medium">{app.id}</TableCell>
-                    <TableCell>{app.customerName}</TableCell>
+                    <TableCell>{userName}</TableCell>
                     <TableCell className="font-semibold">
                       ₹{app.amount.toLocaleString("en-IN")}
                     </TableCell>

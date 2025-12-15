@@ -36,6 +36,7 @@ const App = () => (
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
 
+          <Route path="*" element={<NotFound />} />
           {/* protected routes */}
           <Route element={<ProtectedRoute />}>
             <Route path="/chat" element={<Chat />} />
@@ -46,7 +47,6 @@ const App = () => (
             <Route path="/approval" element={<Approval />} />
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/sanction-letter/:id" element={<SanctionLetter />} />
-            <Route path="*" element={<NotFound />} />
           </Route>
         </Routes>
       </BrowserRouter>
