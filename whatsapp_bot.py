@@ -1,5 +1,5 @@
 import os
-from flask import Flask, request
+from flask import Flask, request, send_from_directory
 from twilio.rest import Client
 from twilio.twiml.messaging_response import MessagingResponse
 from dotenv import load_dotenv
@@ -35,6 +35,9 @@ else:
 
 
 app = Flask(__name__)
+
+# Directory where sanction letters are stored (same as web API)
+SANCTION_DIR = os.path.join(os.path.dirname(__file__), "sanction_letters")
 
 # Twilio credentials
 # Twilio credentials (loaded from .env)
@@ -118,6 +121,14 @@ def send_whatsapp_message(to_number: str, message: str, media_url: str = None):
         print(f"❌ Error sending message: {e}")
 
 
+@app.route("/sanction_letters/<path:filename>", methods=["GET"])
+def download_sanction_letter(filename):
+    """
+    Serve generated sanction letters so Twilio can fetch them as media.
+    """
+    return send_from_directory(SANCTION_DIR, filename, as_attachment=True)
+
+
 @app.route("/webhook", methods=["POST"])
 def webhook():
     """
@@ -127,11 +138,25 @@ def webhook():
         # Get incoming message details
         incoming_msg = request.values.get("Body", "").strip()
         from_number = request.values.get("From", "")  # Format: whatsapp:+1234567890
-        
-        print(f"📱 Received from {from_number}: {incoming_msg}")
+        num_media = int(request.values.get("NumMedia", "0") or "0")
+
+        print(f"📱 Received from {from_number}: {incoming_msg} (media count: {num_media})")
         
         # Get or create agent for this user
         agent = get_or_create_session(from_number)
+
+        # If user has sent a media file (e.g., salary slip PDF), acknowledge it.
+        # Note: The core loan logic currently simulates uploads; here we at least
+        # mirror that behaviour for WhatsApp by confirming receipt.
+        if num_media > 0:
+            media_content_type = request.values.get("MediaContentType0", "")
+            media_url = request.values.get("MediaUrl0", "")
+            print(f"📎 Incoming media: {media_url} ({media_content_type})")
+
+            if media_content_type == "application/pdf":
+                incoming_msg = f"I have uploaded my salary slip via WhatsApp: {media_url}"
+            else:
+                incoming_msg = f"I have uploaded a document via WhatsApp: {media_url}"
 
         # Handle first message
         if not agent.conversation_history:
@@ -144,7 +169,27 @@ def webhook():
         # --- ✅ IMPORTANT PART ---
         # Return TwiML so Twilio shows message immediately
         resp = MessagingResponse()
-        resp.message(reply_text)
+
+        # If a sanction letter has just been generated, try to attach it as media.
+        # MasterAgent returns text like: "Sanction Letter Generated: path/to/file.pdf ..."
+        media_url = None
+        marker = "Sanction Letter Generated:"
+        if marker in reply_text:
+            try:
+                after = reply_text.split(marker, 1)[1].strip()
+                first_line = after.splitlines()[0].strip()
+                pdf_path = first_line
+                filename = os.path.basename(pdf_path)
+                base_url = request.url_root.rstrip("/")
+                media_url = f"{base_url}/sanction_letters/{filename}"
+                print(f"📄 Attaching sanction letter for WhatsApp: {media_url}")
+            except Exception as parse_err:
+                print(f"⚠️ Could not parse sanction letter path from reply: {parse_err}")
+
+        msg = resp.message(reply_text)
+        if media_url:
+            msg.media(media_url)
+
         return str(resp)
 
     except Exception as e:
