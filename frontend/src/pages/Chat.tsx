@@ -155,7 +155,7 @@ const Chat = () => {
     sendToBackend(text);
   };
 
-  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
@@ -165,9 +165,55 @@ const Chat = () => {
       timestamp: new Date(),
     };
     setMessages((prev) => [...prev, userMessage]);
+    setIsTyping(true);
 
-    // Tell backend about the upload
-    sendToBackend(`I have uploaded my salary slip: ${file.name}`);
+    try {
+      // Create form data and upload file
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('session_id', sessionId || '');
+
+      const res = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const data = await res.json();
+
+      if (data.success && data.reply) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: "assistant",
+            content: data.reply,
+            timestamp: new Date(),
+          },
+        ]);
+        
+        if (data.stage) {
+          const stageIndex = stages.findIndex(
+            (s) => s.toLowerCase().replace(" ", "_") === data.stage
+          );
+          if (stageIndex !== -1) setCurrentStage(stageIndex + 1);
+        }
+      }
+    } catch (error) {
+      console.error('Upload error:', error);
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          content: "Sorry, there was an error uploading your file. Please try again.",
+          timestamp: new Date(),
+        },
+      ]);
+    } finally {
+      setIsTyping(false);
+      // Allow selecting the same file again by clearing the input value
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+    }
   };
 
   const handleLanguageChange = async (newLang: string) => {
@@ -393,6 +439,8 @@ const Chat = () => {
                     size="lg"
                     className="shrink-0 px-5 py-3"
                     onClick={handleUploadClick}
+                    aria-label="Upload document"
+                    title="Upload document"
                   >
                     <Upload className="h-5 w-5" />
                   </Button>

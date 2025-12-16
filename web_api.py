@@ -67,12 +67,71 @@ def profile():
     })
     
 from flask import send_from_directory
+from werkzeug.utils import secure_filename
 
 SANCTION_DIR = os.path.join(os.path.dirname(__file__), "sanction_letters")
+UPLOAD_DIR = os.path.join(os.path.dirname(__file__), "uploaded_documents")
+
+# Create upload directory if it doesn't exist
+os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 @app.route("/sanction_letters/<path:filename>")
 def download_sanction_letter(filename):
     return send_from_directory(SANCTION_DIR, filename, as_attachment=True)
+
+@app.post("/api/upload")
+def upload_document():
+    """Handle document uploads (salary slips, ID proofs, etc.)"""
+    if 'file' not in request.files:
+        return jsonify({"error": "No file provided"}), 400
+    
+    file = request.files['file']
+    session_id = request.form.get('session_id')
+    
+    if not session_id:
+        return jsonify({"error": "session_id required"}), 400
+    
+    if file.filename == '':
+        return jsonify({"error": "No file selected"}), 400
+    
+    # Save the file
+    filename = secure_filename(file.filename)
+    filepath = os.path.join(UPLOAD_DIR, filename)
+    file.save(filepath)
+    
+    # Update the agent's state
+    if session_id in sessions:
+        agent = sessions[session_id]["agent"]
+        agent.state["documents_uploaded"] = True
+        agent.state["uploaded_file"] = filename
+
+        # Try to auto-read salary from the PDF
+        try:
+            analysis = agent.upload_agent.analyze_uploaded_file(filepath)
+        except Exception as e:
+            analysis = {"success": False, "message": f"Analyzer error: {e}"}
+
+        if analysis.get("monthly_salary"):
+            # Update customer salary from slip
+            agent.state.setdefault("customer_data", {})
+            agent.state["customer_data"]["salary"] = int(analysis["monthly_salary"])
+
+        # Process the upload through the agent (moves stage forward)
+        reply = agent.process_message(f"I have uploaded my document: {filename}")
+
+        return jsonify({
+            "success": True,
+            "filename": filename,
+            "reply": reply,
+            "stage": agent.state.get("stage"),
+            "analysis": analysis,
+        })
+    
+    return jsonify({
+        "success": True,
+        "filename": filename,
+        "message": "File uploaded successfully"
+    })
 
 @app.post("/api/chat")
 def chat():

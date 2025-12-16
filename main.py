@@ -649,10 +649,45 @@ Is this correct? (Yes/No)"""
             return response + "\n" + self._send_rejection_options()
 
     def _handle_document_upload(self, user_message: str) -> str:
-        if "skip" in user_message.lower():
+        """Handle document upload stage"""
+        user_lower = user_message.lower()
+        
+        # Check if user wants to skip
+        if "skip" in user_lower:
             self.state["stage"] = "rejection"
             return self._send_rejection_options()
-        return "Please upload your salary slip to proceed."
+        
+        # Check if document was uploaded (message from upload endpoint)
+        if "uploaded" in user_lower or "document" in user_lower or self.state.get("documents_uploaded"):
+            # Extract monthly income from uploaded document or use customer data
+            customer_name = self.state["customer_data"]["name"]
+            monthly_salary = self.state["customer_data"].get("salary", 0)
+            
+            if monthly_salary == 0:
+                return "Unable to verify your income from the document. Please try uploading again or contact support."
+            
+            # Calculate EMI
+            loan_amount = self.state["loan_request"]["amount"]
+            tenure = self.state["loan_request"]["tenure"]
+            interest_rate = 12.0
+            
+            from utils.emi_calc import calculate_emi
+            monthly_emi = calculate_emi(loan_amount, interest_rate, tenure)
+            
+            # Evaluate with salary
+            result = self.underwriting_agent.evaluate_with_salary(monthly_salary, monthly_emi)
+            
+            if result["decision"] == "APPROVED":
+                self.state["stage"] = "approval"
+                self.state["final_decision"] = "APPROVED"
+                return f"✅ Document verified successfully!\n\nYour monthly income of ₹{monthly_salary:,} qualifies for this loan.\nEMI-to-Income ratio: {result['emi_ratio']:.1f}%\n\n" + self._generate_sanction_letter()
+            else:
+                self.state["stage"] = "rejection"
+                self.state["final_decision"] = "REJECTED"
+                return f"❌ Based on your monthly income of ₹{monthly_salary:,}, the EMI of ₹{monthly_emi:,.0f} would be {result['emi_ratio']:.1f}% of your income, which exceeds our 50% limit.\n\n" + self._send_rejection_options()
+        
+        # Still waiting for upload
+        return "Please click the upload button (📎) to upload your salary slip, or type 'skip' to explore other options."
 
     def _send_rejection_options(self) -> str:
         collateral_info = self.secured_loan_agent.parse_collateral(self.state["customer_data"].get("collateral", "None"))

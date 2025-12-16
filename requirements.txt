@@ -13,3 +13,4 @@ twilio
 ngrok
 shap
 langdetect
+PyPDF2
