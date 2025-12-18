@@ -3,6 +3,7 @@
 This project is an AI-powered loan origination system that allows users to apply for loans via **Website Chat** or **WhatsApp**.  
 Both channels connect to a **single Master Agent** that orchestrates verification, risk assessment, underwriting, and document generation.
 
+**OUR DEMO VIDEO:** https://www.youtube.com/watch?v=liPhNCAfjFg
 ---
 
 ## Features
@@ -27,6 +28,8 @@ Both channels connect to a **single Master Agent** that orchestrates verificatio
 - **PDF Generation:** ReportLab
 - **Document Parsing:** OCR / NLP
 - **Frontend:** React + TypeScript (Vite)
+- **Authentication:** Firebase
+- **Multilingual feature using:** Deeptranslator 
 
 ---
 
@@ -51,6 +54,28 @@ TWILIO_AUTH_TOKEN=your_auth_token
 TWILIO_WHATSAPP_NUMBER=whatsapp:+14155238886
 GROQ_API_KEY=your_groq_api_key
 ```
+## To interact with our application :
+
+### 1. Create .env in frontend folder with firebase credentials : 
+
+```bash
+VITE_FIREBASE_API_KEY=VITE_FIREBASE_API_KEY
+VITE_FIREBASE_AUTH_DOMAIN=VITE_FIREBASE_AUTH_DOMAIN
+VITE_FIREBASE_PROJECT_ID=VITE_FIREBASE_PROJECT_ID
+VITE_FIREBASE_STORAGE_BUCKET=VITE_FIREBASE_STORAGE_BUCKET
+VITE_FIREBASE_MESSAGING_SENDER_ID=VITE_FIREBASE_MESSAGING_SENDER_ID
+VITE_FIREBASE_APP_ID=VITE_FIREBASE_APP_ID
+VITE_FIREBASE_MEASUREMENT_ID=VITE_FIREBASE_MEASUREMENT_ID
+```
+### 2. Run the code below:
+
+```bash
+pip install -r requirements.txt
+python web_api.py
+```
+
+## To further interact on WhatsApp with Twilio : 
+
 ### 1. Start the WhatsApp Flask Server
 
 Open a terminal in the backend folder and run:
