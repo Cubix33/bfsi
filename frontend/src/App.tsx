@@ -38,7 +38,7 @@ const App = () => (
 
           <Route path="*" element={<NotFound />} />
           {/* protected routes */}
-          <Route element={<ProtectedRoute />}>
+          {/* <Route element={<ProtectedRoute />}> */}
             <Route path="/chat" element={<Chat />} />
             <Route path="/summary" element={<Summary />} />
             <Route path="/verify" element={<Verification />} />
@@ -47,7 +47,7 @@ const App = () => (
             <Route path="/approval" element={<Approval />} />
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/sanction-letter/:id" element={<SanctionLetter />} />
-          </Route>
+          {/* </Route> */}
         </Routes>
       </BrowserRouter>
 
